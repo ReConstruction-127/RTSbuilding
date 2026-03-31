@@ -3,6 +3,7 @@ package com.rtsbuilding.rtsbuilding.network;
 import com.rtsbuilding.rtsbuilding.RtsbuildingMod;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
@@ -11,7 +12,9 @@ import net.minecraft.resources.ResourceLocation;
 public record C2SRtsSetGuiBindingPayload(
         byte slot,
         boolean clear,
-        BlockPos pos) implements CustomPacketPayload {
+        BlockPos pos,
+        byte faceId,
+        String itemIdHint) implements CustomPacketPayload {
     public static final Type<C2SRtsSetGuiBindingPayload> TYPE = new Type<>(
             ResourceLocation.fromNamespaceAndPath(RtsbuildingMod.MODID, "c2s_rts_set_gui_binding"));
 
@@ -20,11 +23,21 @@ public record C2SRtsSetGuiBindingPayload(
                 buf.writeByte(payload.slot());
                 buf.writeBoolean(payload.clear());
                 buf.writeBlockPos(payload.pos() == null ? BlockPos.ZERO : payload.pos());
+                buf.writeByte(payload.faceId());
+                buf.writeUtf(payload.itemIdHint() == null ? "" : payload.itemIdHint(), 128);
             },
             (buf) -> new C2SRtsSetGuiBindingPayload(
                     buf.readByte(),
                     buf.readBoolean(),
-                    buf.readBlockPos()));
+                    buf.readBlockPos(),
+                    buf.readByte(),
+                    buf.readUtf(128)));
+
+    public Direction face() {
+        return this.faceId >= 0 && this.faceId < Direction.values().length
+                ? Direction.from3DDataValue(this.faceId)
+                : null;
+    }
 
     @Override
     public Type<? extends CustomPacketPayload> type() {

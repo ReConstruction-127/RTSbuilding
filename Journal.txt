@@ -2093,3 +2093,230 @@ Compile validation
   - Ran `./gradlew.bat build`
   - Result: SUCCESS
   - Artifact: `build/libs/rtsbuilding-1.0.8-alpha.jar`
+
+[2026-03-28] GUI bind fallback for AE-style terminals
+- User issue
+  - empty GUI bind could not save AE terminal targets
+  - expected any block that opens a GUI on right click to be bindable
+
+- Changes made
+  - `server/RtsStorageManager.java`
+    - relaxed bind-time validation so GUI binding accepts reachable block
+      entities even when they do not expose a direct `MenuProvider`
+    - this specifically allows AE-style terminals that open through their own
+      right-click path to be stored as GUI binds
+    - kept `MenuProvider` display-name lookup when available and fell back to
+      the block display name otherwise
+    - added an explicit client hint when a bound target consumes the bind but
+      still does not open a GUI at use time
+  - `detailed_project.txt`
+    - updated GUI binding notes to reflect the block-entity fallback path
+
+- Build check
+  - validated in the remote-menu rollback pass below
+
+[2026-03-28] Remote GUI validation teleport rollback
+- User issue
+  - remote GUI open still teleported the player to the target and then back
+  - this validation strategy had already been documented as problematic and needed to be rolled back
+
+- Changes made
+  - `server/RtsStorageManager.java`
+    - disabled the opened-menu tick-time player-position spoof on the server
+    - kept remote menu state cleanup when the container closes
+  - `client/ClientRtsController.java`
+    - disabled the client-side mirror of the remote-menu position spoof
+    - kept menu handoff timing and relaxed menu validation paths intact
+  - `detailed_project.txt`
+    - updated the remote menu handoff note to record that opened-menu validation no longer depends on player teleport spoofing
+
+- Build check
+  - Ran `./gradlew.bat build`
+  - Result: SUCCESS
+
+[2026-03-28] Restore 2026-03-26 15:30 remote GUI baseline + GUI bind icons
+- User request
+  - restore the right-click GUI logic to the `1.0.7` / `2026-03-26 15:30`
+    baseline
+  - change craft-dock GUI bindings so they render the bound GUI target icon
+    instead of `1/2/3...`
+  - keep that icon state persistent across reconnect / reload
+
+- Changes made
+  - `client/ClientRtsController.java`
+    - restored the client-side pre/post remote-menu validation position spoof
+      used by the `1.0.7` baseline
+    - restored the `enabled` gate on `applyRemoteMenuHint(...)`
+    - now stores GUI binding icon item ids and preview stacks from the storage
+      page payload
+  - `server/RtsStorageManager.java`
+    - restored early `sendRemoteMenuOpenHint(...)` for bound GUI opens
+    - restored the server-side tick validation-position spoof used while a
+      remote menu remains open
+    - GUI binding save/load/page-sync now persists an icon item id alongside
+      the binding label and target position
+    - kept the newer AE-style bind fallback and explicit "did not open a GUI"
+      feedback
+  - `network/S2CRtsStoragePagePayload.java`
+    - now syncs GUI binding icon item ids in addition to labels
+  - `client/BuilderScreen.java`
+    - craft-dock GUI binding slots now render the saved preview icon when one
+      is available instead of falling back to slot digits
+  - `detailed_project.txt`
+    - corrected the remote GUI handoff notes to match the restored baseline
+    - documented persistent GUI binding icon previews
+
+- Build check
+  - Ran `./gradlew.bat build`
+  - Result: SUCCESS
+
+[2026-03-28] Fluid placement orientation fix + AE2 RTS import/store fix
+- User request
+  - remove the side-hit "prefer above block" branch from RTS direct fluid
+    placement
+  - preserve the important hit orientation data during RTS fluid placement
+  - fix dragging carried items into RTS storage UI so linked AE2 networks can
+    accept the returned items
+
+- Changes made
+  - `server/RtsStorageManager.java`
+    - removed the side-face upward-bias branch from
+      `resolveFluidPlacementPos(...)`
+    - fluid placement now only resolves to the clicked block or the clicked
+      face's adjacent block
+    - added a dedicated fluid-placement hit resolver so replaceability /
+      placement context keeps the original click face instead of forcing
+      `Direction.UP`
+  - `compat/ae2/RtsAe2Compat.java`
+    - relaxed AE2 network insertion so RTS write-back does not depend on a
+      synthetic slot matching the network snapshot
+    - after a successful insert, refreshes the cached snapshot instead of
+      manually patching slot state
+  - `detailed_project.txt`
+    - updated fluid-placement and AE2 write-back notes
+
+- Build check
+  - Ran `./gradlew.bat build`
+  - Result: SUCCESS
+
+[2026-03-29] Remote GUI rollback + AE2 write-back hardening + fluid shape placement
+- User request
+  - roll remote modded-GUI open back to the `1.0.6` no-teleport solution
+  - make RTS store/craft write-back behave correctly while linked AE2 storage
+    is in use
+  - allow linked-container fluids to place more reliably on right click
+  - let selected RTS fluids use the existing shape placement flow
+
+- Changes made
+  - `server/RtsStorageManager.java`
+    - removed the remote-menu tick-time validation position spoof path and
+      kept only relaxed menu validation
+    - changed craft-to-linked output handling to use real linked insertion with
+      rollback instead of the older slot-snapshot precheck, avoiding false
+      `linked storage is full` failures on AE2-backed handlers
+    - added a fluid-handler drain fallback that retries via generic
+      `drain(amount)` when exact-stack drain paths are not supported
+    - linked item insertion helpers now recognize slot-agnostic AE2-backed
+      handlers during RTS store/refund/write-back flows
+  - `compat/ae2/RtsAe2Compat.java`
+    - exposed a slot-agnostic insert path for AE2 network handlers so RTS
+      write-back no longer depends on synthetic slot layout
+  - `client/ClientRtsController.java`
+    - rolled remote GUI handoff back to grace-window behavior without client
+      position spoofing
+  - `client/BuilderScreen.java`
+    - selected fluids now enter the same staged shape workflow as items
+    - shape confirm can dispatch repeated RTS fluid placements for
+      `LINE/SQUARE/CIRCLE/WALL/BOX`
+    - fluid shape mode intentionally skips undo batch recording for now
+
+- Build check
+  - Ran `./gradlew.bat build`
+  - Result: SUCCESS
+
+[2026-03-29] AE2 terminal GUI binding fix
+- User request
+  - investigate why an AE2 terminal bound into the GUI shortcut bar showed an
+    empty icon and would not reopen when clicked
+  - allow AE2-specific compatibility if needed
+
+- Root cause
+  - the GUI binding packet only stored `BlockPos`, so reopen logic had to guess
+    an interaction face later; that is unreliable for face-mounted/multipart
+    targets such as AE2 terminals on a cable bus
+  - binding icon resolution only looked at the host block item, which can be
+    blank or generic for multipart hosts, so the craft-dock slot could render
+    as empty even when the binding itself existed
+
+- Changes made
+  - `network/C2SRtsSetGuiBindingPayload.java`
+    - extended the packet to carry `faceId` and an optional `itemIdHint`
+  - `network/RtsNetworkHandlers.java`
+    - forwarded the new binding metadata into the server manager
+  - `client/ClientRtsController.java`
+    - binding requests now send the clicked face and item-id hint
+    - clear requests send explicit empty metadata
+  - `client/BuilderScreen.java`
+    - GUI bind click now captures `BlockHitResult#getDirection()`
+    - binding icon hint now prefers the block clone stack instead of only
+      `block.asItem()`
+  - `server/RtsStorageManager.java`
+    - GUI bindings now persist the chosen face in player NBT
+    - reopen flow now uses the stored face instead of re-guessing from player
+      position
+    - synthetic interaction points now honor vertical faces as well
+    - binding icon resolution now accepts the hinted item id first, then falls
+      back to clone-stack lookup, then finally plain block item fallback
+
+- Notes
+  - this fixes the main reopen path for AE2 terminals without hard-linking RTS
+    against AE2 classes
+  - if a specific AE2 multipart host still reports a generic icon, the next
+    step is an AE2 reflection helper that resolves the mounted part item from
+    the clicked face
+
+- Build check
+  - Ran `./gradlew.bat build`
+  - Result: SUCCESS
+
+[2026-03-29] Sophisticated Storage remote-menu compat + detailed project refresh
+- User request
+  - investigate why remote-opening Sophisticated Storage barrels still only
+    flashed briefly and returned to the RTS screen
+  - search the upstream mod source before deciding on a fix
+  - update `detailed_project.txt` from the `2026-03-28 15:30` onward journal
+    history
+
+- Upstream finding
+  - official `1.21.x` Sophisticated Storage source opens barrels through
+    `BarrelBlock#useWithoutItem(...) -> player.openMenu(...)`
+  - the resulting `StorageContainerMenu#stillValid(...)` does not rely on
+    `ContainerLevelAccess`; it directly checks player distance to the storage
+    block each tick
+  - that explains why RTS' generic relaxed `ContainerLevelAccess` patch is not
+    sufficient and why the issue is concentrated in Sophisticated Storage
+
+- Changes made
+  - `compat/sophisticatedstorage/RtsSophisticatedStorageCompat.java`
+    - added a dedicated remote-menu wrapper for Sophisticated Storage menus
+    - wrapper keeps remote-opened menus valid without reintroducing player
+      teleport / position spoof behavior
+  - `server/RtsStorageManager.java`
+    - remote menu handoff now routes opened menus through the Sophisticated
+      Storage compat wrapper before validation relax hooks
+  - `client/ClientRtsController.java`
+    - client remote-menu handoff now mirrors the same wrapper path
+    - current container screen menu reference is remapped to the wrapped menu
+      so client-side validity checks do not immediately close it
+  - `detailed_project.txt`
+    - refreshed the project map to reflect all journaled changes since
+      `2026-03-28 15:30`, including:
+      - no-teleport remote-menu behavior
+      - AE2 write-back hardening
+      - fluid shape placement
+      - GUI binding face/icon persistence
+      - Sophisticated Storage remote-menu compat
+
+- Build check
+  - Ran `./gradlew.bat build`
+  - Result: SUCCESS

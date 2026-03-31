@@ -36,6 +36,7 @@ public record S2CRtsStoragePagePayload(
         List<Byte> recentKinds,
         List<String> quickSlotItemIds,
         List<String> guiBindingLabels,
+        List<String> guiBindingItemIds,
         boolean funnelEnabled,
         List<String> funnelBufferItemIds,
         List<Long> funnelBufferCounts) implements CustomPacketPayload {
@@ -117,6 +118,11 @@ public record S2CRtsStoragePagePayload(
                     buf.writeUtf(guiBindingLabel == null ? "" : guiBindingLabel, 128);
                 }
 
+                buf.writeVarInt(payload.guiBindingItemIds().size());
+                for (String guiBindingItemId : payload.guiBindingItemIds()) {
+                    buf.writeUtf(guiBindingItemId == null ? "" : guiBindingItemId, 128);
+                }
+
                 buf.writeBoolean(payload.funnelEnabled());
                 int funnelBufferSize = Math.min(payload.funnelBufferItemIds().size(), payload.funnelBufferCounts().size());
                 buf.writeVarInt(funnelBufferSize);
@@ -190,6 +196,11 @@ public record S2CRtsStoragePagePayload(
                 for (int i = 0; i < guiBindingSize; i++) {
                     guiBindingLabels.add(buf.readUtf(128));
                 }
+                int guiBindingItemIdSize = buf.readVarInt();
+                List<String> guiBindingItemIds = new ArrayList<>(guiBindingItemIdSize);
+                for (int i = 0; i < guiBindingItemIdSize; i++) {
+                    guiBindingItemIds.add(buf.readUtf(128));
+                }
                 boolean funnelEnabled = buf.readBoolean();
                 int funnelBufferSize = buf.readVarInt();
                 List<String> funnelBufferItemIds = new ArrayList<>(funnelBufferSize);
@@ -224,6 +235,7 @@ public record S2CRtsStoragePagePayload(
                         recentKinds,
                         quickSlotItemIds,
                         guiBindingLabels,
+                        guiBindingItemIds,
                         funnelEnabled,
                         funnelBufferItemIds,
                         funnelBufferCounts);

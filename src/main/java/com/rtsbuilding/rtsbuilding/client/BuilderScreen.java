@@ -29,6 +29,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.projectile.ProjectileUtil;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.level.ClipContext;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.phys.AABB;
@@ -311,7 +312,11 @@ public final class BuilderScreen extends Screen {
             if (this.pendingGuiBindSlot >= 0 && isWorldArea(mouseX, mouseY)) {
                 BlockHitResult hit = pickBlockHit();
                 if (hit != null) {
-                    this.controller.setGuiBinding(this.pendingGuiBindSlot, hit.getBlockPos());
+                    this.controller.setGuiBinding(
+                            this.pendingGuiBindSlot,
+                            hit.getBlockPos(),
+                            hit.getDirection(),
+                            resolveGuiBindingItemId(hit));
                     this.pendingGuiBindSlot = -1;
                 }
                 return true;
@@ -450,9 +455,17 @@ public final class BuilderScreen extends Screen {
             }
 
             if (this.controller.hasSelectedFluid()) {
-                clearShapeBuildSession();
                 if (target.blockHit() != null) {
-                    this.controller.placeSelectedFluid(target.blockHit(), forcePlace, target.rayOrigin(), target.rayDir());
+                    placeWithShape(
+                            target.blockHit(),
+                            forcePlace,
+                            target.rayOrigin(),
+                            target.rayDir(),
+                            mouseY,
+                            true,
+                            PlacementReplayKind.TOOL_SLOT,
+                            "",
+                            -1);
                 }
                 return true;
             }
@@ -473,6 +486,7 @@ public final class BuilderScreen extends Screen {
                             target.rayOrigin(),
                             target.rayDir(),
                             mouseY,
+                            false,
                             PlacementReplayKind.PIN_ITEM,
                             this.controller.getSelectedItemId(),
                             -1);
@@ -489,6 +503,7 @@ public final class BuilderScreen extends Screen {
                         target.rayOrigin(),
                         target.rayDir(),
                         mouseY,
+                        false,
                         PlacementReplayKind.TOOL_SLOT,
                         "",
                         getSelectedToolSlot());
@@ -1033,9 +1048,27 @@ public final class BuilderScreen extends Screen {
                 this.hoveredGuiBindingSlot = slot;
             }
             drawPanelFrame(g, slotX, slotY, CRAFT_DOCK_SLOT_SIZE, CRAFT_DOCK_SLOT_SIZE, fill, 0xFF698097, 0xFF0F151C);
-            String text = (!bound || pending) ? "+" : Integer.toString(slot + 1);
-            g.drawCenteredString(this.font, text, slotX + CRAFT_DOCK_SLOT_SIZE / 2, slotY + 2, 0xFFFFFF);
+            ItemStack preview = this.controller.getGuiBindingPreview(slot);
+            if (bound && !pending && !preview.isEmpty()) {
+                drawMiniItem(g, preview, slotX, slotY, CRAFT_DOCK_SLOT_SIZE);
+            } else {
+                String text = (!bound || pending) ? "+" : Integer.toString(slot + 1);
+                g.drawCenteredString(this.font, text, slotX + CRAFT_DOCK_SLOT_SIZE / 2, slotY + 2, 0xFFFFFF);
+            }
         }
+    }
+
+    private void drawMiniItem(GuiGraphics g, ItemStack stack, int slotX, int slotY, int slotSize) {
+        if (stack == null || stack.isEmpty()) {
+            return;
+        }
+        float scale = Math.min(1.0F, slotSize / 16.0F);
+        float inset = Math.max(0.0F, (slotSize - (16.0F * scale)) * 0.5F);
+        g.pose().pushPose();
+        g.pose().translate(slotX + inset, slotY + inset, 150.0F);
+        g.pose().scale(scale, scale, 1.0F);
+        g.renderItem(stack, 0, 0);
+        g.pose().popPose();
     }
 
     private void drawGuiBindCursor(GuiGraphics g, int mouseX, int mouseY) {
@@ -2708,6 +2741,26 @@ public final class BuilderScreen extends Screen {
         return this.minecraft.player.getInventory().getItem(getSelectedToolSlot());
     }
 
+    private String resolveGuiBindingItemId(BlockHitResult hit) {
+        if (hit == null || this.minecraft == null || this.minecraft.level == null) {
+            return "";
+        }
+        BlockPos pos = hit.getBlockPos();
+        if (!this.minecraft.level.hasChunkAt(pos)) {
+            return "";
+        }
+        BlockState state = this.minecraft.level.getBlockState(pos);
+        ItemStack preview = state.getBlock().getCloneItemStack(this.minecraft.level, pos, state);
+        if (preview.isEmpty()) {
+            preview = new ItemStack(state.getBlock().asItem());
+        }
+        if (preview.isEmpty() || preview.is(Items.AIR)) {
+            return "";
+        }
+        var id = BuiltInRegistries.ITEM.getKey(preview.getItem());
+        return id == null ? "" : id.toString();
+    }
+
     private boolean canUseToolSlotShapeSource() {
         if (this.controller.hasSelectedItem() || this.controller.hasSelectedFluid()) {
             return false;
@@ -2776,19 +2829,23 @@ public final class BuilderScreen extends Screen {
     }
 
     private void placeWithShape(BlockHitResult hit, boolean forcePlace, Vec3 rayOrigin, Vec3 rayDir, double mouseY,
-            PlacementReplayKind replayKind, String replayItemId, int replayToolSlot) {
+            boolean fluidPlacement, PlacementReplayKind replayKind, String replayItemId, int replayToolSlot) {
         if (hit == null) {
             return;
         }
         ClientRtsController.BuildShape shape = this.controller.getBuildShape();
         if (shape == ClientRtsController.BuildShape.BLOCK) {
             clearShapeBuildSession();
-            this.controller.placeSelected(hit, forcePlace, rayOrigin, rayDir);
-            recordSinglePlacementForUndo(
-                    hit,
-                    replayKind,
-                    replayItemId,
-                    replayToolSlot);
+            if (fluidPlacement) {
+                this.controller.placeSelectedFluid(hit, forcePlace, rayOrigin, rayDir);
+            } else {
+                this.controller.placeSelected(hit, forcePlace, rayOrigin, rayDir);
+                recordSinglePlacementForUndo(
+                        hit,
+                        replayKind,
+                        replayItemId,
+                        replayToolSlot);
+            }
             return;
         }
 
@@ -2851,8 +2908,9 @@ public final class BuilderScreen extends Screen {
         if (this.controller.getBuildShape() == ClientRtsController.BuildShape.BLOCK) {
             return false;
         }
+        boolean useFluid = this.controller.hasSelectedFluid();
         boolean usePinnedItem = this.controller.hasSelectedItem();
-        if (!usePinnedItem && !canUseToolSlotShapeSource()) {
+        if (!useFluid && !usePinnedItem && !canUseToolSlotShapeSource()) {
             return false;
         }
         ShapeBuildInput input = resolveCurrentShapeBuildInput(null, true);
@@ -2864,18 +2922,24 @@ public final class BuilderScreen extends Screen {
         List<BlockHitResult> hits = buildShapePlacementHits(input, this.shapeFillMode);
         clearShapeBuildSession();
         for (BlockHitResult shapedHit : hits) {
-            this.controller.placeSelected(shapedHit, forcePlace, rayOrigin, rayDir, true);
+            if (useFluid) {
+                this.controller.placeSelectedFluid(shapedHit, forcePlace, rayOrigin, rayDir);
+            } else {
+                this.controller.placeSelected(shapedHit, forcePlace, rayOrigin, rayDir, true);
+            }
         }
-        List<BlockPos> positions = new ArrayList<>(hits.size());
-        for (BlockHitResult shapedHit : hits) {
-            positions.add(shapedHit.getBlockPos().immutable());
+        if (!useFluid) {
+            List<BlockPos> positions = new ArrayList<>(hits.size());
+            for (BlockHitResult shapedHit : hits) {
+                positions.add(shapedHit.getBlockPos().immutable());
+            }
+            recordPlacementBatchForUndo(
+                    usePinnedItem ? PlacementReplayKind.PIN_ITEM : PlacementReplayKind.TOOL_SLOT,
+                    usePinnedItem ? this.controller.getSelectedItemId() : "",
+                    usePinnedItem ? -1 : getSelectedToolSlot(),
+                    input.placementFace(),
+                    positions);
         }
-        recordPlacementBatchForUndo(
-                usePinnedItem ? PlacementReplayKind.PIN_ITEM : PlacementReplayKind.TOOL_SLOT,
-                usePinnedItem ? this.controller.getSelectedItemId() : "",
-                usePinnedItem ? -1 : getSelectedToolSlot(),
-                input.placementFace(),
-                positions);
         return true;
     }
 
@@ -2891,11 +2955,10 @@ public final class BuilderScreen extends Screen {
     }
 
     public ShapeGhostPreview getShapeGhostPreview() {
-        if (this.controller.hasSelectedFluid()
-                || this.controller.getBuildShape() == ClientRtsController.BuildShape.BLOCK) {
+        if (this.controller.getBuildShape() == ClientRtsController.BuildShape.BLOCK) {
             return ShapeGhostPreview.EMPTY;
         }
-        if (!this.controller.hasSelectedItem() && !canUseToolSlotShapeSource()) {
+        if (!this.controller.hasSelectedItem() && !this.controller.hasSelectedFluid() && !canUseToolSlotShapeSource()) {
             return ShapeGhostPreview.EMPTY;
         }
         ShapeBuildInput input = resolveCurrentShapeBuildInput(pickBlockHit(), false);

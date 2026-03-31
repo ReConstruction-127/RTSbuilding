@@ -21,6 +21,10 @@ public final class RtsAe2Compat {
         long getReportedCount(int slot);
     }
 
+    public interface AnySlotInsertItemHandler {
+        ItemStack insertItemAnywhere(ItemStack stack, boolean simulate);
+    }
+
     private static final Ae2Reflection REFLECTION = Ae2Reflection.tryLoad();
 
     private RtsAe2Compat() {
@@ -53,7 +57,7 @@ public final class RtsAe2Compat {
         return fallbackStack == null || fallbackStack.isEmpty() ? 0L : Math.max(0L, fallbackStack.getCount());
     }
 
-    private static final class Ae2NetworkItemHandler implements IItemHandler, ReportedCountItemHandler {
+    private static final class Ae2NetworkItemHandler implements IItemHandler, ReportedCountItemHandler, AnySlotInsertItemHandler {
         private final ServerPlayer player;
         private final Object storageService;
         private final Ae2Reflection reflection;
@@ -85,18 +89,19 @@ public final class RtsAe2Compat {
             if (stack == null || stack.isEmpty()) {
                 return ItemStack.EMPTY;
             }
-
-            Object key = this.reflection.toItemKey(stack);
-            if (key == null) {
+            if (slot < 0 || slot >= getSlots()) {
                 return stack.copy();
             }
+            return insertItemAnywhere(stack, simulate);
+        }
 
-            if (slot >= 0 && slot < this.slots.size()) {
-                SlotView current = this.slots.get(slot);
-                if (!this.reflection.keysEqual(current.key(), key)) {
-                    return stack.copy();
-                }
-            } else if (slot != this.slots.size()) {
+        @Override
+        public ItemStack insertItemAnywhere(ItemStack stack, boolean simulate) {
+            if (stack == null || stack.isEmpty()) {
+                return ItemStack.EMPTY;
+            }
+            Object key = this.reflection.toItemKey(stack);
+            if (key == null) {
                 return stack.copy();
             }
 
@@ -106,7 +111,7 @@ public final class RtsAe2Compat {
             }
 
             if (!simulate) {
-                recordInserted(key, inserted);
+                refreshSnapshot();
             }
 
             ItemStack remain = stack.copy();
@@ -165,20 +170,6 @@ public final class RtsAe2Compat {
             }
         }
 
-        private void recordInserted(Object key, long inserted) {
-            for (int i = 0; i < this.slots.size(); i++) {
-                SlotView current = this.slots.get(i);
-                if (this.reflection.keysEqual(current.key(), key)) {
-                    this.slots.set(i, new SlotView(key, current.displayStack(), current.amount() + inserted));
-                    return;
-                }
-            }
-            ItemStack display = this.reflection.toStack(key, 1);
-            if (!display.isEmpty()) {
-                display.setCount(1);
-                this.slots.add(new SlotView(key, display, inserted));
-            }
-        }
     }
 
     private record SlotView(Object key, ItemStack displayStack, long amount) {

@@ -1,5 +1,5 @@
 RTSBUILDING DETAILED PROJECT RECORD
-Last Rewrite: 2026-03-28
+Last Rewrite: 2026-03-29
 Project Root: E:\RTSbuilding
 Runtime Target: Minecraft 1.21.1 + NeoForge 21.1.219 + Java 21
 
@@ -41,7 +41,22 @@ Current implemented gameplay surface:
   - recent history now persists across logout/rejoin as player session data
 - remote block placement from linked storage or current hotbar slot
 - remote fluid placement from linked/internal fluid storage
+  - now resolves only clicked block or clicked-face adjacent block
+  - no longer auto-biases side clicks upward
+  - placement validation/context keeps the original hit face instead of
+    collapsing to `Direction.UP`
+  - linked-container drain now falls back to generic `drain(amount)` for
+    handlers that reject exact-stack drain calls
+  - selected fluids can now use the staged shape flow for
+    `LINE / SQUARE / CIRCLE / WALL / BOX`
 - remote interaction with blocks/entities using hotbar or linked items
+- craft-dock GUI binds now persist:
+  - target face
+  - cached icon item id
+  so face-mounted terminals can reopen more reliably
+- remote-opened Sophisticated Storage menus are wrapped through a dedicated
+  compat path because their menu validity check does not use
+  `ContainerLevelAccess`
 - remote mining with tool slot selection and progress sync
 - craft terminal + workbench-linked refill/import flows
 - craftables search panel with paging
@@ -64,6 +79,7 @@ Optional compat:
 - JEI API/runtime integration
 - AE2 storage-service bridge via optional reflection compat
 - FTB Quests / FTB Teams via reflection-based optional compat
+- Sophisticated Storage remote-menu still-valid bypass compat for RTS opens
 
 Important project files:
 - `build.gradle`
@@ -81,8 +97,10 @@ Client:
 - `client/ClientRtsController.java`
   - client-side RTS state hub
   - storage page state, craftables state, selected item/fluid, quick pins
-  - quick pins and GUI binding labels are server-backed and synced through the
-    storage page payload
+  - quick pins, GUI binding labels, and GUI binding icon item ids are
+    server-backed and synced through the storage page payload
+  - remote-opened Sophisticated Storage menus are client-wrapped so custom
+    `stillValid(...)` distance checks do not immediately close them
   - owns persistent normalized storage-overlay layout state
   - packet send helpers
   - menu handoff guard so delayed container GUI opens do not get preempted by
@@ -92,7 +110,7 @@ Client:
   - top bar modes
   - bottom-anchored storage/craft dock UI
   - craft-terminal button + 8-slot GUI bind/open/clear ring
-  - shape placement flow
+  - shape placement flow for both items and selected RTS fluids
 - `client/RtsClientInputGate.java`
   - draggable overlay UI for container/crafting screens
   - intercepts input for linked pickup/import/crafting shortcuts
@@ -113,6 +131,10 @@ Server:
   - linked storage session state
   - persistent quick pins, recent history, and GUI bindings in player NBT
   - AE2-aware linked item-handler resolution
+  - AE2 write-back/import paths also route through the network compat handler
+  - remote menu validation now stays on the no-teleport path
+  - remote-opened Sophisticated Storage menus are server-wrapped to bypass
+    their hard-coded `stillValid(...)` distance check
   - browsing/search/paging
   - placement / interaction / mining / crafting / fluid handling
   - recent-entry tracking
@@ -132,6 +154,7 @@ Compat:
 - `compat/jei/*`
 - `compat/ftb/RtsFtbCompat.java`
 - `compat/ftb/RtsFtbCompatImpl.java`
+- `compat/sophisticatedstorage/RtsSophisticatedStorageCompat.java`
 
 ================================================================
 4. Core Runtime Model
@@ -155,7 +178,8 @@ Compat:
 - funnel state
 - recent entry deque
 - RTS quick pin item ids
-- GUI binding slots (target position + dimension + display label)
+- GUI binding slots (target position + dimension + display label + clicked
+  face + cached icon item id)
 
 Persistence behavior:
 - session data is loaded from player persistent NBT on first RTS access
@@ -311,6 +335,12 @@ Builder screen:
 - GUI bindings now live in the craft dock near the sort/resize controls
 - slot count is 8 instead of the older 3-slot sidebar layout
 - each slot is server-backed persistent state, not client-only transient UI
+- bind validation now accepts block entities even when they do not expose a
+  direct `MenuProvider`, so AE-style right-click terminals can still be saved
+- bound slots can render the saved target block/item icon instead of only a
+  numeric index; the icon id is persisted with the binding state
+- GUI bind packets also persist the clicked face so multipart / face-mounted
+  targets can be reopened against the same side later
 - left click on a bound slot opens the saved GUI target directly
 - left click on an empty slot arms it for the next world GUI bind
 - right click toggles armed rebind mode for a slot
@@ -329,8 +359,13 @@ Builder screen:
   container screen is constructed
 - server-side interaction itself already uses a temporary remote-POV context;
   this pass stabilizes the client menu takeover side of the flow
-- the remote-menu hint is now also accepted even if RTS camera/UI already
-  handed off, which avoids losing the incoming GUI during saved-bind opens
+- saved-bind opens keep only the short client grace window; RTS no longer uses
+  the older client/server validation-position spoof after the `1.0.6` rollback
+- generic remote menus still get relaxed container/container-access
+  validation when possible
+- Sophisticated Storage menus additionally need a dedicated wrapper because
+  their `StorageContainerMenu#stillValid(...)` performs its own direct
+  player-to-block distance check outside `ContainerLevelAccess`
 
 5.7 Crafting support
 Crafting-related paths currently in project:
@@ -364,7 +399,8 @@ Main packet groups:
   - `C2SRtsLinkStoragePayload`
   - `C2SRtsRequestStoragePagePayload`
   - `S2CRtsStoragePagePayload`
-    - now also carries quick pin item ids and GUI binding labels
+    - now also carries quick pin item ids, GUI binding labels, and GUI
+      binding icon item ids
   - `S2CRtsCraftablesPayload`
     - now includes per-entry recipe-option lists for the pre-craft selector
   - `S2CRtsCraftFeedbackPayload`
@@ -447,7 +483,7 @@ This rewrite reflects the repo state after the following functional pass:
 - added shift-store from RTS hotbar into linked storage
 - aligned craft panel visible rows with storage rows
 
-Post-1.0.7 follow-up reflected in the current repo state:
+Post-2026-03-28 15:30 follow-up reflected in the current repo state:
 - added optional AE2 network item-handler compat for linked storage browse /
   extract / reported-count display paths
 - added client layout persistence through `RtsClientLayoutStore`
@@ -459,7 +495,20 @@ Post-1.0.7 follow-up reflected in the current repo state:
 - made the container/crafting overlay draggable through persisted normalized
   X/Y layout state
 - changed recent-entry aggregation to merge repeated actions per item/fluid
-- relaxed remote-menu hint intake so bind-open/craft-terminal menu handoff is
-  more reliable outside the exact RTS-enabled frame
+- GUI bindings now persist icon item ids so the craft dock can render target
+  previews after reconnect / reload
+- removed the reopened-menu position spoof again and kept only the no-teleport
+  remote-menu grace/validation path
+- hardened AE2 write-back so RTS store/craft refund paths can insert into
+  slot-agnostic AE2 network views without false `storage is full` failures
+- added generic linked-fluid drain fallback for handlers that only support
+  amount-based draining
+- extended selected RTS fluids so they can use the existing shape placement
+  pipeline
+- GUI bind packets now carry clicked face + icon hint, and the saved binding
+  state persists both for AE-style multipart terminals
+- added dedicated Sophisticated Storage remote-menu compat because the official
+  `1.21.x` storage menu bypasses `ContainerLevelAccess` and performs its own
+  direct distance `stillValid(...)` check
 
 End of file.

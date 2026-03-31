@@ -16,6 +16,7 @@ import java.util.function.BiFunction;
 
 import com.mojang.blaze3d.platform.InputConstants;
 import com.rtsbuilding.rtsbuilding.RtsbuildingMod;
+import com.rtsbuilding.rtsbuilding.compat.sophisticatedstorage.RtsSophisticatedStorageCompat;
 import com.rtsbuilding.rtsbuilding.network.C2SRtsBreakPayload;
 import com.rtsbuilding.rtsbuilding.network.C2SRtsFunnelTargetPayload;
 import com.rtsbuilding.rtsbuilding.network.C2SRtsCraftRecipePayload;
@@ -51,6 +52,7 @@ import com.rtsbuilding.rtsbuilding.network.S2CRtsStoragePagePayload;
 
 import net.minecraft.client.CameraType;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.CraftingScreen;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -194,6 +196,8 @@ public final class ClientRtsController {
     private final String[] quickSlotLabels = new String[QUICK_SLOT_COUNT];
     private final ItemStack[] quickSlotPreviews = new ItemStack[QUICK_SLOT_COUNT];
     private final String[] guiBindingLabels = new String[GUI_BINDING_SLOT_COUNT];
+    private final String[] guiBindingItemIds = new String[GUI_BINDING_SLOT_COUNT];
+    private final ItemStack[] guiBindingPreviews = new ItemStack[GUI_BINDING_SLOT_COUNT];
     private boolean funnelEnabled;
     private BlockPos lastFunnelTarget;
     private int funnelTargetCooldownTicks;
@@ -216,6 +220,8 @@ public final class ClientRtsController {
         }
         for (int i = 0; i < GUI_BINDING_SLOT_COUNT; i++) {
             this.guiBindingLabels[i] = "";
+            this.guiBindingItemIds[i] = "";
+            this.guiBindingPreviews[i] = ItemStack.EMPTY;
         }
     }
 
@@ -532,6 +538,13 @@ public final class ClientRtsController {
         return this.guiBindingLabels[index];
     }
 
+    public ItemStack getGuiBindingPreview(int index) {
+        if (index < 0 || index >= GUI_BINDING_SLOT_COUNT) {
+            return ItemStack.EMPTY;
+        }
+        return this.guiBindingPreviews[index];
+    }
+
     public boolean hasGuiBinding(int index) {
         return !getGuiBindingLabel(index).isBlank();
     }
@@ -727,40 +740,13 @@ public final class ClientRtsController {
 
     public void preTick() {
         Minecraft minecraft = Minecraft.getInstance();
-        if (minecraft.player == null) {
+        if (minecraft.player == null || !this.enabled) {
             clearRemoteMenuValidationState();
-            return;
         }
-        if (!this.enabled) {
-            restoreRemoteMenuValidationPosition(minecraft);
-            clearRemoteMenuValidationState();
-            return;
-        }
-
-        boolean hasRemoteMenuOpen = minecraft.player.containerMenu != null
-                && minecraft.player.containerMenu.containerId != 0;
-        if (!hasRemoteMenuOpen && this.pendingRemoteMenuOpenTicks <= 0) {
-            restoreRemoteMenuValidationPosition(minecraft);
-            this.activeRemoteMenuValidationPos = null;
-            return;
-        }
-
-        if (this.activeRemoteMenuValidationPos == null && this.pendingRemoteMenuValidationPos != null) {
-            this.activeRemoteMenuValidationPos = this.pendingRemoteMenuValidationPos.immutable();
-        }
-        if (this.activeRemoteMenuValidationPos == null || this.remoteMenuValidationSpoofed) {
-            return;
-        }
-
-        this.remoteMenuRestorePos = minecraft.player.position();
-        Vec3 validationPos = resolveMenuValidationPosition(this.activeRemoteMenuValidationPos);
-        minecraft.player.setPos(validationPos.x, validationPos.y, validationPos.z);
-        this.remoteMenuValidationSpoofed = true;
     }
 
     public void tick() {
         Minecraft minecraft = Minecraft.getInstance();
-        restoreRemoteMenuValidationPosition(minecraft);
         if (!this.enabled) {
             return;
         }
@@ -804,12 +790,10 @@ public final class ClientRtsController {
 
         if (hasRemoteMenuOpen) {
             this.pendingRemoteMenuOpenTicks = 0;
-            if (this.relaxedRemoteMenu != minecraft.player.containerMenu) {
-                relaxClientMenuValidation(minecraft.player.containerMenu);
-                this.relaxedRemoteMenu = minecraft.player.containerMenu;
-            }
-            if (this.activeRemoteMenuValidationPos == null && this.pendingRemoteMenuValidationPos != null) {
-                this.activeRemoteMenuValidationPos = this.pendingRemoteMenuValidationPos.immutable();
+            AbstractContainerMenu activeRemoteMenu = installClientRemoteMenuCompat(minecraft, minecraft.player.containerMenu);
+            if (this.relaxedRemoteMenu != activeRemoteMenu) {
+                relaxClientMenuValidation(activeRemoteMenu);
+                this.relaxedRemoteMenu = activeRemoteMenu;
             }
             if (minecraft.screen instanceof BuilderScreen) {
                 // First-open GUI construction can leave a brief null-screen handoff. Once a real
@@ -818,12 +802,8 @@ public final class ClientRtsController {
             }
         } else if (this.pendingRemoteMenuOpenTicks > 0) {
             this.pendingRemoteMenuOpenTicks--;
-            if (this.activeRemoteMenuValidationPos == null && this.pendingRemoteMenuValidationPos != null) {
-                this.activeRemoteMenuValidationPos = this.pendingRemoteMenuValidationPos.immutable();
-            }
         } else {
-            this.activeRemoteMenuValidationPos = null;
-            this.pendingRemoteMenuValidationPos = null;
+            clearRemoteMenuValidationState();
             this.relaxedRemoteMenu = null;
         }
 
@@ -1189,7 +1169,7 @@ public final class ClientRtsController {
         }
 
         applyQuickSlotPayload(payload.quickSlotItemIds());
-        applyGuiBindingPayload(payload.guiBindingLabels());
+        applyGuiBindingPayload(payload.guiBindingLabels(), payload.guiBindingItemIds());
 
         this.funnelEnabled = payload.funnelEnabled();
         this.funnelBufferEntries.clear();
@@ -1214,13 +1194,7 @@ public final class ClientRtsController {
     }
 
     public void applyRemoteMenuHint(S2CRtsRemoteMenuHintPayload payload) {
-        if (payload == null || payload.pos() == null) {
-            return;
-        }
-        BlockPos pos = payload.pos().immutable();
-        this.pendingRemoteMenuOpenTicks = Math.max(this.pendingRemoteMenuOpenTicks, REMOTE_MENU_OPEN_GRACE_TICKS);
-        this.pendingRemoteMenuValidationPos = pos;
-        this.activeRemoteMenuValidationPos = pos;
+        // 1.0.6 baseline: keep only the local open-grace window and do not spoof player position.
     }
 
     public void applyCraftables(S2CRtsCraftablesPayload payload) {
@@ -1555,11 +1529,16 @@ public final class ClientRtsController {
         setMode(BuilderMode.INTERACT);
     }
 
-    public void setGuiBinding(int index, BlockPos pos) {
+    public void setGuiBinding(int index, BlockPos pos, Direction face, String itemIdHint) {
         if (index < 0 || index >= GUI_BINDING_SLOT_COUNT || pos == null) {
             return;
         }
-        PacketDistributor.sendToServer(new C2SRtsSetGuiBindingPayload((byte) index, false, pos));
+        PacketDistributor.sendToServer(new C2SRtsSetGuiBindingPayload(
+                (byte) index,
+                false,
+                pos,
+                (byte) (face == null ? -1 : face.get3DDataValue()),
+                itemIdHint == null ? "" : itemIdHint));
     }
 
     public void clearGuiBinding(int index) {
@@ -1567,7 +1546,7 @@ public final class ClientRtsController {
             return;
         }
         this.guiBindingLabels[index] = "";
-        PacketDistributor.sendToServer(new C2SRtsSetGuiBindingPayload((byte) index, true, BlockPos.ZERO));
+        PacketDistributor.sendToServer(new C2SRtsSetGuiBindingPayload((byte) index, true, BlockPos.ZERO, (byte) -1, ""));
     }
 
     public void openGuiBinding(int index) {
@@ -1660,6 +1639,8 @@ public final class ClientRtsController {
     private void clearGuiBindingsLocal() {
         for (int i = 0; i < GUI_BINDING_SLOT_COUNT; i++) {
             this.guiBindingLabels[i] = "";
+            this.guiBindingItemIds[i] = "";
+            this.guiBindingPreviews[i] = ItemStack.EMPTY;
         }
     }
 
@@ -1680,12 +1661,25 @@ public final class ClientRtsController {
         }
     }
 
-    private void applyGuiBindingPayload(List<String> payloadGuiBindings) {
+    private void applyGuiBindingPayload(List<String> payloadGuiBindings, List<String> payloadGuiBindingItemIds) {
         clearGuiBindingsLocal();
-        int size = Math.min(GUI_BINDING_SLOT_COUNT, payloadGuiBindings == null ? 0 : payloadGuiBindings.size());
+        int size = Math.min(
+                GUI_BINDING_SLOT_COUNT,
+                Math.min(
+                        payloadGuiBindings == null ? 0 : payloadGuiBindings.size(),
+                        payloadGuiBindingItemIds == null ? 0 : payloadGuiBindingItemIds.size()));
         for (int i = 0; i < size; i++) {
             String label = payloadGuiBindings.get(i);
             this.guiBindingLabels[i] = label == null ? "" : label;
+            String itemId = payloadGuiBindingItemIds.get(i);
+            this.guiBindingItemIds[i] = itemId == null ? "" : itemId;
+            ResourceLocation key = ResourceLocation.tryParse(this.guiBindingItemIds[i]);
+            if (key == null || !BuiltInRegistries.ITEM.containsKey(key)) {
+                this.guiBindingItemIds[i] = "";
+                this.guiBindingPreviews[i] = ItemStack.EMPTY;
+                continue;
+            }
+            this.guiBindingPreviews[i] = new ItemStack(BuiltInRegistries.ITEM.get(key));
         }
     }
 
@@ -1861,19 +1855,9 @@ public final class ClientRtsController {
 
     private void beginRemoteMenuOpenGrace(BlockPos menuPos) {
         this.pendingRemoteMenuOpenTicks = Math.max(this.pendingRemoteMenuOpenTicks, REMOTE_MENU_OPEN_GRACE_TICKS);
-        this.pendingRemoteMenuValidationPos = menuPos == null ? null : menuPos.immutable();
-        if (menuPos == null) {
-            this.activeRemoteMenuValidationPos = null;
-        }
     }
 
     private void restoreRemoteMenuValidationPosition(Minecraft minecraft) {
-        if (!this.remoteMenuValidationSpoofed || minecraft == null || minecraft.player == null || this.remoteMenuRestorePos == null) {
-            this.remoteMenuValidationSpoofed = false;
-            this.remoteMenuRestorePos = null;
-            return;
-        }
-        minecraft.player.setPos(this.remoteMenuRestorePos.x, this.remoteMenuRestorePos.y, this.remoteMenuRestorePos.z);
         this.remoteMenuValidationSpoofed = false;
         this.remoteMenuRestorePos = null;
     }
@@ -1888,6 +1872,41 @@ public final class ClientRtsController {
 
     private static Vec3 resolveMenuValidationPosition(BlockPos pos) {
         return new Vec3(pos.getX() + 0.5D, pos.getY() + 0.1D, pos.getZ() + 0.5D);
+    }
+
+    private static AbstractContainerMenu installClientRemoteMenuCompat(Minecraft minecraft, AbstractContainerMenu menu) {
+        if (minecraft == null || minecraft.player == null || menu == null) {
+            return menu;
+        }
+        AbstractContainerMenu wrapped = RtsSophisticatedStorageCompat.wrapRemoteMenu(menu);
+        if (wrapped == menu) {
+            return menu;
+        }
+        minecraft.player.containerMenu = wrapped;
+        remapContainerScreenMenu(minecraft.screen, wrapped);
+        return wrapped;
+    }
+
+    private static void remapContainerScreenMenu(Screen screen, AbstractContainerMenu menu) {
+        if (screen == null || menu == null) {
+            return;
+        }
+        Class<?> type = screen.getClass();
+        while (type != null && type != Object.class) {
+            for (Field field : type.getDeclaredFields()) {
+                if (!AbstractContainerMenu.class.isAssignableFrom(field.getType())) {
+                    continue;
+                }
+                try {
+                    field.setAccessible(true);
+                    field.set(screen, menu);
+                    return;
+                } catch (ReflectiveOperationException ignored) {
+                    // Some runtime-specific/final fields cannot be patched reflectively.
+                }
+            }
+            type = type.getSuperclass();
+        }
     }
 
     private static void relaxClientMenuValidation(AbstractContainerMenu menu) {

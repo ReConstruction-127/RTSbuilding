@@ -24,6 +24,7 @@ import java.util.function.Supplier;
 import com.rtsbuilding.rtsbuilding.client.BuilderMode;
 import com.rtsbuilding.rtsbuilding.compat.ae2.RtsAe2Compat;
 import com.rtsbuilding.rtsbuilding.compat.ftb.RtsFtbCompat;
+import com.rtsbuilding.rtsbuilding.compat.sophisticatedstorage.RtsSophisticatedStorageCompat;
 import com.rtsbuilding.rtsbuilding.network.C2SRtsInteractPayload;
 import com.rtsbuilding.rtsbuilding.network.C2SRtsLinkStoragePayload;
 import com.rtsbuilding.rtsbuilding.network.C2SRtsStoreFluidPayload;
@@ -141,7 +142,9 @@ public final class RtsStorageManager {
     private static final String NBT_GUI_BINDING_SLOT = "slot";
     private static final String NBT_GUI_BINDING_POS = "pos";
     private static final String NBT_GUI_BINDING_DIMENSION = "dimension";
+    private static final String NBT_GUI_BINDING_FACE = "face";
     private static final String NBT_GUI_BINDING_LABEL = "label";
+    private static final String NBT_GUI_BINDING_ITEM_ID = "item_id";
 
     private static final Map<UUID, Session> SESSIONS = new ConcurrentHashMap<>();
     private static final Map<String, Set<String>> ITEM_CREATIVE_TAB_CACHE = new ConcurrentHashMap<>();
@@ -175,35 +178,11 @@ public final class RtsStorageManager {
     }
 
     public static void onPlayerTickPre(ServerPlayer player) {
-        if (player == null) {
-            return;
-        }
-        Session session = SESSIONS.get(player.getUUID());
-        if (session == null || session.remoteMenuValidationPos == null) {
-            return;
-        }
-        if (player.containerMenu == null || player.containerMenu.containerId == 0 || session.remoteMenuValidationSpoofed) {
-            return;
-        }
-
-        session.remoteMenuRestorePos = player.position();
-        Vec3 validationPos = resolveMenuValidationPosition(session.remoteMenuValidationPos);
-        player.setPos(validationPos.x, validationPos.y, validationPos.z);
-        session.remoteMenuValidationSpoofed = true;
+        // 1.0.6 baseline: remote GUI opens do not spoof the player position.
     }
 
     public static void onPlayerTickPost(ServerPlayer player) {
-        if (player == null) {
-            return;
-        }
-        Session session = SESSIONS.get(player.getUUID());
-        if (session == null) {
-            return;
-        }
-        restoreRemoteMenuValidationPosition(player, session);
-        if (player.containerMenu == null || player.containerMenu.containerId == 0) {
-            clearRemoteMenuValidation(session);
-        }
+        // 1.0.6 baseline: remote GUI opens do not spoof the player position.
     }
 
     private static Session getOrCreateSession(ServerPlayer player) {
@@ -309,10 +288,22 @@ public final class RtsStorageManager {
                 continue;
             }
             String label = bindingTag.getString(NBT_GUI_BINDING_LABEL);
+            String itemId = bindingTag.getString(NBT_GUI_BINDING_ITEM_ID);
+            ResourceLocation itemKey = ResourceLocation.tryParse(itemId);
+            String normalizedItemId = itemKey != null && BuiltInRegistries.ITEM.containsKey(itemKey) ? itemId : "";
+            Direction face = null;
+            if (bindingTag.contains(NBT_GUI_BINDING_FACE, Tag.TAG_BYTE)) {
+                int faceId = bindingTag.getByte(NBT_GUI_BINDING_FACE);
+                if (faceId >= 0 && faceId < Direction.values().length) {
+                    face = Direction.from3DDataValue(faceId);
+                }
+            }
             session.guiBindings[slot] = new GuiBinding(
                     BlockPos.of(bindingTag.getLong(NBT_GUI_BINDING_POS)).immutable(),
                     ResourceKey.create(Registries.DIMENSION, key),
-                    label == null ? "" : label);
+                    label == null ? "" : label,
+                    normalizedItemId,
+                    face);
         }
     }
 
@@ -384,7 +375,11 @@ public final class RtsStorageManager {
             bindingTag.putInt(NBT_GUI_BINDING_SLOT, i);
             bindingTag.putLong(NBT_GUI_BINDING_POS, binding.pos().asLong());
             bindingTag.putString(NBT_GUI_BINDING_DIMENSION, binding.dimension().location().toString());
+            if (binding.face() != null) {
+                bindingTag.putByte(NBT_GUI_BINDING_FACE, (byte) binding.face().get3DDataValue());
+            }
             bindingTag.putString(NBT_GUI_BINDING_LABEL, binding.label() == null ? "" : binding.label());
+            bindingTag.putString(NBT_GUI_BINDING_ITEM_ID, binding.itemId() == null ? "" : binding.itemId());
             guiBindings.add(bindingTag);
         }
         root.put(NBT_GUI_BINDINGS, guiBindings);
@@ -597,7 +592,7 @@ public final class RtsStorageManager {
         requestPage(player, session.page, session.search, session.category, session.sort, session.ascending);
     }
 
-    public static void setGuiBinding(ServerPlayer player, byte slotId, boolean clear, BlockPos pos) {
+    public static void setGuiBinding(ServerPlayer player, byte slotId, boolean clear, BlockPos pos, Direction face, String itemIdHint) {
         Session session = getOrCreateSession(player);
         int slot = slotId;
         if (!isValidGuiBindingSlot(slot)) {
@@ -618,21 +613,25 @@ public final class RtsStorageManager {
             return;
         }
 
-        MenuProvider provider = resolveBindableMenuProvider(player.serverLevel(), pos);
-        if (provider == null) {
+        ServerLevel level = player.serverLevel();
+        MenuProvider provider = resolveBindableMenuProvider(level, pos);
+        if (!canBindGuiTarget(level, pos)) {
             player.displayClientMessage(Component.literal("Target has no bindable GUI."), true);
             return;
         }
 
-        String label = provider.getDisplayName() == null ? "" : provider.getDisplayName().getString();
+        String label = provider == null || provider.getDisplayName() == null ? "" : provider.getDisplayName().getString();
         if (label.isBlank()) {
             label = resolveDisplayName(player, pos);
         }
+        String iconItemId = resolveGuiBindingIconItemId(level, pos, itemIdHint);
 
         session.guiBindings[slot] = new GuiBinding(
                 pos.immutable(),
-                player.serverLevel().dimension(),
-                label);
+                level.dimension(),
+                label,
+                iconItemId,
+                face);
         saveSessionToPlayerNbt(player, session);
         requestPage(player, session.page, session.search, session.category, session.sort, session.ascending);
     }
@@ -662,7 +661,8 @@ public final class RtsStorageManager {
 
         ServerLevel level = player.serverLevel();
         BlockPos pos = binding.pos();
-        SyntheticBlockInteraction interaction = createGuiBindingInteraction(player, pos);
+        sendRemoteMenuOpenHint(player, pos);
+        SyntheticBlockInteraction interaction = createGuiBindingInteraction(player, pos, binding.face());
         BlockHitResult hit = interaction.hit();
         Vec3 hitLocation = hit.getLocation();
         Vec3 interactionPos = interaction.interactionPos();
@@ -717,11 +717,15 @@ public final class RtsStorageManager {
         if (!interactResult.consumesAction()) {
             MenuProvider provider = resolveBindableMenuProvider(level, pos);
             if (provider == null) {
+                player.displayClientMessage(Component.literal("Bound target did not open a GUI."), true);
+                requestPage(player, session.page, session.search, session.category, session.sort, session.ascending);
                 return;
             }
             player.openMenu(provider);
             if (player.containerMenu != null && player.containerMenu != menuBeforeInteract) {
                 markRemoteMenuOpen(player, session, player.containerMenu, pos);
+            } else {
+                player.displayClientMessage(Component.literal("Bound target did not open a GUI."), true);
             }
         }
         requestPage(player, session.page, session.search, session.category, session.sort, session.ascending);
@@ -978,8 +982,10 @@ public final class RtsStorageManager {
         }
 
         List<String> guiBindingLabels = new ArrayList<>(GUI_BINDING_SLOT_COUNT);
+        List<String> guiBindingItemIds = new ArrayList<>(GUI_BINDING_SLOT_COUNT);
         for (GuiBinding guiBinding : session.guiBindings) {
             guiBindingLabels.add(guiBinding == null || guiBinding.label() == null ? "" : guiBinding.label());
+            guiBindingItemIds.add(guiBinding == null || guiBinding.itemId() == null ? "" : guiBinding.itemId());
         }
 
         Map<String, Long> funnelBufferSummary = summarizeFunnelBuffer(session);
@@ -1016,6 +1022,7 @@ public final class RtsStorageManager {
                 recentKinds,
                 quickSlotItemIds,
                 guiBindingLabels,
+                guiBindingItemIds,
                 session.funnelEnabled,
                 funnelBufferItemIds,
                 funnelBufferCounts));
@@ -1050,6 +1057,7 @@ public final class RtsStorageManager {
                 List.of(),
                 buildQuickSlotPayload(session),
                 buildGuiBindingLabelPayload(session),
+                buildGuiBindingItemIdPayload(session),
                 session.funnelEnabled,
                 List.of(),
                 List.of()));
@@ -1960,8 +1968,9 @@ public final class RtsStorageManager {
         if (placePos == null) {
             return;
         }
+        BlockHitResult placementHit = resolveFluidPlacementHit(hit, placePos);
 
-        if (!placeFluidBlock(level, player, placePos, transfer)) {
+        if (!placeFluidBlock(level, player, placePos, transfer, placementHit)) {
             return;
         }
 
@@ -2464,18 +2473,20 @@ public final class RtsStorageManager {
             }
         }
 
-        if (!canStoreStacksToLinkedOnly(handlers, outputs)) {
-            rollbackCraftIngredients(handlers, player, extracted);
-            return CraftExecutionResult.failure(true);
-        }
-
+        List<ItemStack> storedOutputs = new ArrayList<>(outputs.size());
         for (ItemStack stack : outputs) {
             if (stack.isEmpty()) {
                 continue;
             }
             ItemStack remain = storeToLinkedOnlyPreferExisting(handlers, stack);
+            int storedCount = Math.max(0, stack.getCount() - remain.getCount());
+            if (storedCount > 0) {
+                storedOutputs.add(stack.copyWithCount(storedCount));
+            }
             if (!remain.isEmpty()) {
-                moveToPlayerInventoryOnly(player, remain);
+                rollbackStoredCraftOutputs(handlers, storedOutputs);
+                rollbackCraftIngredients(handlers, player, extracted);
+                return CraftExecutionResult.failure(true);
             }
         }
 
@@ -2517,6 +2528,20 @@ public final class RtsStorageManager {
             ItemStack remain = storeToLinkedOnlyPreferExisting(handlers, ingredient.stack());
             if (!remain.isEmpty()) {
                 moveToPlayerInventoryOnly(player, remain);
+            }
+        }
+    }
+
+    private static void rollbackStoredCraftOutputs(List<IItemHandler> handlers, List<ItemStack> storedOutputs) {
+        for (int i = storedOutputs.size() - 1; i >= 0; i--) {
+            ItemStack stored = storedOutputs.get(i);
+            int remaining = stored.getCount();
+            while (remaining > 0) {
+                ItemStack extracted = extractOneMatchingPrototypeFromLinked(handlers, stored);
+                if (extracted.isEmpty()) {
+                    break;
+                }
+                remaining -= extracted.getCount();
             }
         }
     }
@@ -3059,6 +3084,13 @@ public final class RtsStorageManager {
         return slot >= 0 && slot < GUI_BINDING_SLOT_COUNT;
     }
 
+    private static boolean canBindGuiTarget(ServerLevel level, BlockPos pos) {
+        if (resolveBindableMenuProvider(level, pos) != null) {
+            return true;
+        }
+        return level != null && pos != null && level.hasChunkAt(pos) && level.getBlockEntity(pos) != null;
+    }
+
     private static MenuProvider resolveBindableMenuProvider(ServerLevel level, BlockPos pos) {
         if (level == null || pos == null || !level.hasChunkAt(pos)) {
             return null;
@@ -3068,6 +3100,27 @@ public final class RtsStorageManager {
             return provider;
         }
         return level.getBlockEntity(pos) instanceof MenuProvider menuProvider ? menuProvider : null;
+    }
+
+    private static String resolveGuiBindingIconItemId(ServerLevel level, BlockPos pos, String itemIdHint) {
+        if (level == null || pos == null || !level.hasChunkAt(pos)) {
+            return "";
+        }
+        ResourceLocation hintKey = ResourceLocation.tryParse(itemIdHint);
+        if (hintKey != null && BuiltInRegistries.ITEM.containsKey(hintKey)) {
+            return hintKey.toString();
+        }
+        BlockState state = level.getBlockState(pos);
+        if (state.isAir()) {
+            return "";
+        }
+        ItemStack cloneStack = state.getBlock().getCloneItemStack(level, pos, state);
+        Item item = cloneStack.isEmpty() ? state.getBlock().asItem() : cloneStack.getItem();
+        if (item == null || item == Items.AIR) {
+            return "";
+        }
+        ResourceLocation id = BuiltInRegistries.ITEM.getKey(item);
+        return id == null ? "" : id.toString();
     }
 
     private static boolean storeFluidFromLinkedItem(ServerPlayer player, Session session, List<IItemHandler> itemHandlers,
@@ -3256,10 +3309,7 @@ public final class RtsStorageManager {
             if (remaining <= 0) {
                 break;
             }
-            FluidStack request = new FluidStack(fluid, remaining);
-            FluidStack drained = linked.handler().drain(
-                    request,
-                    execute ? IFluidHandler.FluidAction.EXECUTE : IFluidHandler.FluidAction.SIMULATE);
+            FluidStack drained = drainMatchingFluid(linked.handler(), fluid, remaining, execute);
             if (!drained.isEmpty()) {
                 remaining -= drained.getAmount();
             }
@@ -3286,6 +3336,28 @@ public final class RtsStorageManager {
         }
 
         return amount - remaining;
+    }
+
+    private static FluidStack drainMatchingFluid(IFluidHandler handler, Fluid fluid, int amount, boolean execute) {
+        if (handler == null || fluid == null || amount <= 0) {
+            return FluidStack.EMPTY;
+        }
+        IFluidHandler.FluidAction action = execute ? IFluidHandler.FluidAction.EXECUTE : IFluidHandler.FluidAction.SIMULATE;
+        FluidStack request = new FluidStack(fluid, amount);
+        FluidStack exact = handler.drain(request, action);
+        if (!exact.isEmpty()) {
+            return exact;
+        }
+
+        FluidStack genericPreview = handler.drain(amount, IFluidHandler.FluidAction.SIMULATE);
+        if (genericPreview.isEmpty() || genericPreview.getFluid() != fluid) {
+            return FluidStack.EMPTY;
+        }
+        if (!execute) {
+            return genericPreview;
+        }
+        FluidStack generic = handler.drain(amount, IFluidHandler.FluidAction.EXECUTE);
+        return !generic.isEmpty() && generic.getFluid() == fluid ? generic : FluidStack.EMPTY;
     }
 
     private static int fillFluidHandlerAtTarget(ServerLevel level, BlockPos clickedPos, Direction face, FluidStack fluidStack) {
@@ -3330,56 +3402,21 @@ public final class RtsStorageManager {
     private static BlockPos resolveFluidPlacementPos(ServerLevel level, ServerPlayer player, BlockHitResult hit,
             FluidStack fluidStack) {
         BlockPos clicked = hit.getBlockPos();
-        if (canPlaceFluidAt(level, player, clicked, fluidStack)) {
+        if (canPlaceFluidAt(level, player, clicked, fluidStack, resolveFluidPlacementHit(hit, clicked))) {
             return clicked;
         }
 
-        // In RTS top-down view, side-face hits are common; prefer top cell when valid.
-        BlockPos above = clicked.above();
-        if (hit.getDirection().getAxis() != Direction.Axis.Y
-                && level.hasChunkAt(above)
-                && canPlaceFluidAt(level, player, above, fluidStack)) {
-            return above;
-        }
-
         BlockPos adjacent = clicked.relative(hit.getDirection());
-        if (!level.hasChunkAt(adjacent)) {
-            return level.hasChunkAt(above) && canPlaceFluidAt(level, player, above, fluidStack) ? above : null;
-        }
-        if (canPlaceFluidAt(level, player, adjacent, fluidStack)) {
+        if (level.hasChunkAt(adjacent)
+                && canPlaceFluidAt(level, player, adjacent, fluidStack, resolveFluidPlacementHit(hit, adjacent))) {
             return adjacent;
-        }
-        if (level.hasChunkAt(above) && canPlaceFluidAt(level, player, above, fluidStack)) {
-            return above;
         }
         return null;
     }
 
-    private static boolean canPlaceFluidAt(ServerLevel level, ServerPlayer player, BlockPos pos, FluidStack fluidStack) {
-        if (fluidStack.isEmpty() || !level.hasChunkAt(pos)) {
-            return false;
-        }
-        Fluid fluid = fluidStack.getFluid();
-        if (!fluid.getFluidType().canBePlacedInLevel(level, pos, fluidStack)) {
-            return false;
-        }
-
-        BlockState state = level.getBlockState(pos);
-        BlockPlaceContext context = new BlockPlaceContext(
-                level,
-                player,
-                InteractionHand.MAIN_HAND,
-                ItemStack.EMPTY,
-                new BlockHitResult(Vec3.atCenterOf(pos), Direction.UP, pos, false));
-        boolean canContain = state.getBlock() instanceof LiquidBlockContainer liquidContainer
-                && liquidContainer.canPlaceLiquid(player, level, pos, state, fluid);
-        boolean isDestNonSolid = !state.isSolid();
-        boolean isDestReplaceable = state.canBeReplaced(context);
-        return level.isEmptyBlock(pos) || isDestNonSolid || isDestReplaceable || canContain;
-    }
-
-    private static boolean placeFluidBlock(ServerLevel level, ServerPlayer player, BlockPos pos, FluidStack fluidStack) {
-        if (!canPlaceFluidAt(level, player, pos, fluidStack)) {
+    private static boolean placeFluidBlock(ServerLevel level, ServerPlayer player, BlockPos pos, FluidStack fluidStack,
+            BlockHitResult placementHit) {
+        if (!canPlaceFluidAt(level, player, pos, fluidStack, placementHit)) {
             return false;
         }
 
@@ -3408,13 +3445,63 @@ public final class RtsStorageManager {
                 player,
                 InteractionHand.MAIN_HAND,
                 ItemStack.EMPTY,
-                new BlockHitResult(Vec3.atCenterOf(pos), Direction.UP, pos, false));
+                placementHit);
         boolean isDestNonSolid = !state.isSolid();
         boolean isDestReplaceable = state.canBeReplaced(context);
         if ((isDestNonSolid || isDestReplaceable) && !state.liquid()) {
             level.destroyBlock(pos, true);
         }
         return level.setBlock(pos, placeState, 11);
+    }
+
+    private static boolean canPlaceFluidAt(ServerLevel level, ServerPlayer player, BlockPos pos, FluidStack fluidStack,
+            BlockHitResult placementHit) {
+        if (fluidStack.isEmpty() || !level.hasChunkAt(pos)) {
+            return false;
+        }
+        Fluid fluid = fluidStack.getFluid();
+        if (!fluid.getFluidType().canBePlacedInLevel(level, pos, fluidStack)) {
+            return false;
+        }
+
+        BlockState state = level.getBlockState(pos);
+        BlockPlaceContext context = new BlockPlaceContext(
+                level,
+                player,
+                InteractionHand.MAIN_HAND,
+                ItemStack.EMPTY,
+                placementHit == null ? new BlockHitResult(Vec3.atCenterOf(pos), Direction.UP, pos, false) : placementHit);
+        boolean canContain = state.getBlock() instanceof LiquidBlockContainer liquidContainer
+                && liquidContainer.canPlaceLiquid(player, level, pos, state, fluid);
+        boolean isDestNonSolid = !state.isSolid();
+        boolean isDestReplaceable = state.canBeReplaced(context);
+        return level.isEmptyBlock(pos) || isDestNonSolid || isDestReplaceable || canContain;
+    }
+
+    private static BlockHitResult resolveFluidPlacementHit(BlockHitResult sourceHit, BlockPos targetPos) {
+        if (targetPos == null) {
+            return new BlockHitResult(Vec3.atCenterOf(BlockPos.ZERO), Direction.UP, BlockPos.ZERO, false);
+        }
+        if (sourceHit == null) {
+            return new BlockHitResult(Vec3.atCenterOf(targetPos), Direction.UP, targetPos, false);
+        }
+
+        BlockPos clicked = sourceHit.getBlockPos();
+        Direction face = sourceHit.getDirection();
+        if (targetPos.equals(clicked)) {
+            return new BlockHitResult(sourceHit.getLocation(), face, targetPos, false);
+        }
+
+        if (targetPos.equals(clicked.relative(face))) {
+            Direction targetFace = face.getOpposite();
+            Vec3 targetLocation = Vec3.atCenterOf(targetPos).add(
+                    targetFace.getStepX() * 0.498D,
+                    targetFace.getStepY() * 0.498D,
+                    targetFace.getStepZ() * 0.498D);
+            return new BlockHitResult(targetLocation, targetFace, targetPos, false);
+        }
+
+        return new BlockHitResult(Vec3.atCenterOf(targetPos), face, targetPos, false);
     }
 
     private static int getPlayerMainInventoryStart(ServerPlayer player) {
@@ -3903,6 +3990,15 @@ public final class RtsStorageManager {
     }
 
     private static ItemStack insertToHandler(IItemHandler handler, ItemStack stack) {
+        if (stack == null || stack.isEmpty()) {
+            return ItemStack.EMPTY;
+        }
+        if (handler instanceof LinkedItemHandlerView linkedView && linkedView.supportsAnySlotInsert()) {
+            return linkedView.insertItemAnywhere(stack, false);
+        }
+        if (handler instanceof RtsAe2Compat.AnySlotInsertItemHandler anySlot) {
+            return anySlot.insertItemAnywhere(stack, false);
+        }
         ItemStack remain = stack.copy();
         for (int slot = 0; slot < handler.getSlots() && !remain.isEmpty(); slot++) {
             remain = handler.insertItem(slot, remain, false);
@@ -4184,6 +4280,15 @@ public final class RtsStorageManager {
     }
 
     private static ItemStack insertToHandlerPreferExisting(IItemHandler handler, ItemStack stack) {
+        if (stack == null || stack.isEmpty()) {
+            return ItemStack.EMPTY;
+        }
+        if (handler instanceof LinkedItemHandlerView linkedView && linkedView.supportsAnySlotInsert()) {
+            return linkedView.insertItemAnywhere(stack, false);
+        }
+        if (handler instanceof RtsAe2Compat.AnySlotInsertItemHandler anySlot) {
+            return anySlot.insertItemAnywhere(stack, false);
+        }
         ItemStack remain = stack.copy();
         for (int slot = 0; slot < handler.getSlots() && !remain.isEmpty(); slot++) {
             ItemStack slotStack = handler.getStackInSlot(slot);
@@ -4869,12 +4974,14 @@ public final class RtsStorageManager {
     }
 
     private static void markRemoteMenuOpen(ServerPlayer player, Session session, AbstractContainerMenu menu, BlockPos pos) {
-        if (player == null || session == null || menu == null) {
+        if (menu == null) {
             return;
         }
-        session.remoteMenuValidationPos = pos == null ? null : pos.immutable();
-        relaxOpenedMenuValidation(menu);
-        sendRemoteMenuOpenHint(player, pos);
+        AbstractContainerMenu remoteMenu = RtsSophisticatedStorageCompat.wrapRemoteMenu(menu);
+        if (player != null && player.containerMenu != remoteMenu) {
+            player.containerMenu = remoteMenu;
+        }
+        relaxOpenedMenuValidation(remoteMenu);
     }
 
     private static void clearRemoteMenuValidation(Session session) {
@@ -4887,17 +4994,11 @@ public final class RtsStorageManager {
     }
 
     private static void restoreRemoteMenuValidationPosition(ServerPlayer player, Session session) {
-        if (player == null || session == null || !session.remoteMenuValidationSpoofed || session.remoteMenuRestorePos == null) {
-            if (session != null) {
-                session.remoteMenuRestorePos = null;
-                session.remoteMenuValidationSpoofed = false;
-            }
+        if (session == null) {
             return;
         }
-        Vec3 restorePos = session.remoteMenuRestorePos;
-        player.setPos(restorePos.x, restorePos.y, restorePos.z);
-        session.remoteMenuRestorePos = null;
         session.remoteMenuValidationSpoofed = false;
+        session.remoteMenuRestorePos = null;
     }
 
     private static Vec3 resolveMenuValidationPosition(BlockPos pos) {
@@ -4905,21 +5006,18 @@ public final class RtsStorageManager {
     }
 
     private static void sendRemoteMenuOpenHint(ServerPlayer player, BlockPos pos) {
-        if (player == null || pos == null) {
-            return;
-        }
-        PacketDistributor.sendToPlayer(player, new S2CRtsRemoteMenuHintPayload(pos.immutable()));
+        // 1.0.6 baseline: client uses only the local open-grace window.
     }
 
-    private static SyntheticBlockInteraction createGuiBindingInteraction(ServerPlayer player, BlockPos pos) {
-        Direction face = resolveGuiBindingFace(player, pos);
+    private static SyntheticBlockInteraction createGuiBindingInteraction(ServerPlayer player, BlockPos pos, Direction preferredFace) {
+        Direction face = preferredFace == null ? resolveGuiBindingFace(player, pos) : preferredFace;
         Vec3 faceCenter = Vec3.atCenterOf(pos).add(
                 face.getStepX() * 0.498D,
-                0.0D,
+                face.getStepY() * 0.498D,
                 face.getStepZ() * 0.498D);
         Vec3 eyePos = faceCenter.add(
                 face.getStepX() * 2.2D,
-                0.0D,
+                face.getStepY() * 2.2D,
                 face.getStepZ() * 2.2D);
         double eyeHeight = player == null ? 1.62D : player.getEyeHeight(player.getPose());
         Vec3 interactionPos = new Vec3(eyePos.x, eyePos.y - eyeHeight, eyePos.z);
@@ -5184,6 +5282,20 @@ public final class RtsStorageManager {
         return guiBindingLabels;
     }
 
+    private static List<String> buildGuiBindingItemIdPayload(Session session) {
+        List<String> guiBindingItemIds = new ArrayList<>(GUI_BINDING_SLOT_COUNT);
+        if (session == null) {
+            for (int i = 0; i < GUI_BINDING_SLOT_COUNT; i++) {
+                guiBindingItemIds.add("");
+            }
+            return guiBindingItemIds;
+        }
+        for (GuiBinding guiBinding : session.guiBindings) {
+            guiBindingItemIds.add(guiBinding == null || guiBinding.itemId() == null ? "" : guiBinding.itemId());
+        }
+        return guiBindingItemIds;
+    }
+
     private static List<Long> toPackedPositions(List<BlockPos> positions) {
         List<Long> packed = new ArrayList<>(positions.size());
         for (BlockPos pos : positions) {
@@ -5317,7 +5429,7 @@ public final class RtsStorageManager {
     private record RecentEntry(String id, long amount, long capacity, byte kind) {
     }
 
-    private record GuiBinding(BlockPos pos, ResourceKey<Level> dimension, String label) {
+    private record GuiBinding(BlockPos pos, ResourceKey<Level> dimension, String label, String itemId, Direction face) {
     }
 
     private static final class LinkedItemHandlerView implements IItemHandler, RtsAe2Compat.ReportedCountItemHandler {
@@ -5342,6 +5454,24 @@ public final class RtsStorageManager {
         @Override
         public ItemStack insertItem(int slot, ItemStack stack, boolean simulate) {
             return this.allowStore ? this.delegate.insertItem(slot, stack, simulate) : stack;
+        }
+
+        private boolean supportsAnySlotInsert() {
+            return this.allowStore && this.delegate instanceof RtsAe2Compat.AnySlotInsertItemHandler;
+        }
+
+        private ItemStack insertItemAnywhere(ItemStack stack, boolean simulate) {
+            if (!this.allowStore) {
+                return stack == null ? ItemStack.EMPTY : stack.copy();
+            }
+            if (this.delegate instanceof RtsAe2Compat.AnySlotInsertItemHandler anySlot) {
+                return anySlot.insertItemAnywhere(stack, simulate);
+            }
+            ItemStack remain = stack == null ? ItemStack.EMPTY : stack.copy();
+            for (int slot = 0; slot < this.delegate.getSlots() && !remain.isEmpty(); slot++) {
+                remain = this.delegate.insertItem(slot, remain, simulate);
+            }
+            return remain;
         }
 
         @Override

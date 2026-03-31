@@ -102,7 +102,13 @@ public final class RtsNetworkHandlers {
     public static void handleSetGuiBinding(C2SRtsSetGuiBindingPayload payload, IPayloadContext context) {
         context.enqueueWork(() -> {
             if (context.player() instanceof ServerPlayer serverPlayer) {
-                RtsStorageManager.setGuiBinding(serverPlayer, payload.slot(), payload.clear(), payload.pos());
+                RtsStorageManager.setGuiBinding(
+                        serverPlayer,
+                        payload.slot(),
+                        payload.clear(),
+                        payload.pos(),
+                        payload.face(),
+                        payload.itemIdHint());
             }
         });
     }
