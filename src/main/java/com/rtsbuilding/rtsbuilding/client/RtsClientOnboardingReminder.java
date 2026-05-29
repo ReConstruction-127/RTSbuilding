@@ -74,6 +74,7 @@ public final class RtsClientOnboardingReminder {
         minecraft.player.displayClientMessage(Component.translatable(
                 "chat.rtsbuilding.intro.feedback",
                 discordComponent(),
+                githubComponent(),
                 Component.literal(RtsCommunityLinks.QQ_GROUP).withStyle(style -> style
                         .withColor(ChatFormatting.GREEN)
                         .withClickEvent(new ClickEvent(ClickEvent.Action.COPY_TO_CLIPBOARD, RtsCommunityLinks.QQ_GROUP))
@@ -95,6 +96,14 @@ public final class RtsClientOnboardingReminder {
                 .withUnderlined(true)
                 .withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, RtsCommunityLinks.DISCORD_INVITE))
                 .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Component.literal(RtsCommunityLinks.DISCORD_INVITE))));
+    }
+
+    private static Component githubComponent() {
+        return Component.literal(RtsCommunityLinks.GITHUB_REPOSITORY).withStyle(style -> style
+                .withColor(ChatFormatting.BLUE)
+                .withUnderlined(true)
+                .withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, RtsCommunityLinks.GITHUB_REPOSITORY))
+                .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Component.literal(RtsCommunityLinks.GITHUB_REPOSITORY))));
     }
 
     private static String currentReminderKey(Minecraft minecraft) {
