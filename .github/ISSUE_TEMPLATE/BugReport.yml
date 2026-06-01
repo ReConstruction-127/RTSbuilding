@@ -1,105 +1,96 @@
 name: Bug 反馈
-description: 在游戏中遇到Bug。
-title: (将此栏【替换】为你的标题)
-labels: ["Bug", "待查看", "优先级：无"]
+description: 游戏中遇到崩溃、卡顿、显示异常、兼容问题或行为不符合预期。
+title: "[问题] "
+labels: ["bug"]
 body:
   - type: markdown
     attributes:
       value: |
-        感谢您进行 Bug 反馈。请在上面的文本框⬆️起一个能够清晰描述您的问题的标题, 便于开发者解决您的问题。
+        感谢反馈！
 
-        > [!important]
-        > 重要：如果要提出**多个 Bug**, 请为每一个 Bug 开一个单独的 issue。
-        >
-        > 如果您不知道如何有效、精准地表述, 我们建议您先阅读《提问的智慧》([链接](https://github.com/ryanhanwu/How-To-Ask-Questions-The-Smart-Way/blob/main/README-zh_CN.md))。
+        标题不用写得很标准，也不需要自己判断分类、难度、优先级或标签。你只要把遇到的现象、使用版本、复现方式和截图/日志尽量写清楚即可；我们会在整理时统一改标题、加标签、拆分或合并 issue。
+
+        如果你不确定这是 Bug、兼容问题还是使用困惑，也可以直接写在这里。
 
   - type: checkboxes
     id: checklist
     attributes:
-      label: 检查清单
-      description: 在开始反馈这个问题之前, 请先检查：
+      label: 简单确认
+      description: 提交前请尽量确认以下内容。
       options:
-        - label: 我已在 [Issues 页面](https://github.com/Hcrab/RTSbuilding/issues) 中搜索 , 并确保汇报的不是已知问题
+        - label: 我已经在 Issues 页面简单搜索过，确认没有明显重复的问题。
           required: true
-        - label: 我已知晓并同意, 此处仅用于汇报Mod中存在的问题。
-          required: true
-        - label: 我勾选了所有框, 因为我根本就没仔细看他们是什么
-
-  - type: markdown
-    attributes:
-      value: |
-        ### Bug 信息
-        描述您遇到的 Bug。您可以附上截图、录屏、日志等材料, 便于开发者追踪问题。
-
-  - type: textarea
-    id: expected
-    attributes:
-      label: 期望的行为
-      description: 详细的描述你期望发生的行为, 突出与目前(可能不正确的)行为的不同。
-    validations:
-      required: true
 
   - type: textarea
     id: what-happened
     attributes:
-      label: 实际结果
-      description: 实际发生的行为。
+      label: 实际发生了什么？
+      description: 描述你看到的异常现象。可以贴截图、录屏、日志片段，越具体越好。
+      placeholder: 例如：进入 RTS 后右键某个机器，UI 闪一下就消失；或者选择物品后无法继续放置。
     validations:
       required: true
 
   - type: textarea
-    id: reproduce-steps
+    id: expected
     attributes:
-      label: 重现步骤
-      description: |
-        详细描述要怎么操作才能再次触发这个 Bug。
-      placeholder: |
-        1. 首先……
-        2. 然后……
-        3. ……
+      label: 你原本期望怎样？
+      description: 简单说明你认为正常情况下应该发生什么。
     validations:
       required: false
 
   - type: textarea
-    id: stacktrace
+    id: reproduce-steps
     attributes:
-      label: 日志(可选)
-      description: 如果在遇到这个 Bug 时发生了崩溃(弹出崩溃提示), 或者产生了错误日志, 请将产生的堆栈跟踪信息粘贴到此处, 便于开发者定位 Bug。
-      render: shell
+      label: 如何复现？
+      description: 如果可以复现，请写出操作步骤；如果不稳定，也可以写“大概在什么情况下出现”。
+      placeholder: |
+        1. 进入世界
+        2. 打开 RTS
+        3. 点击/右键/选择……
+        4. 出现……
+    validations:
+      required: false
 
   - type: input
-    id: modpack_version
+    id: mod_version
     attributes:
-      label: 应用版本
-      description: 您当前运行的游戏版本与 Mod 版本号, 可以在启动器的对应位置查看。
-      placeholder: 如：Beta-1.0.3
+      label: RTSBuilding 版本
+      description: 例如 1.1.0、1.0.5、0.0.5；如果不确定，也可以写“不确定”。
+      placeholder: 例如：1.1.0
     validations:
       required: true
 
   - type: input
-    id: java_version
+    id: minecraft_loader
     attributes:
-      label: Java版本
-      description: |
-        您当前使用的 Java版本, 可以运行 `java -version` 查看。
-        如果您不能肯定此 Bug 与Java无关, 请填写此项。
-      placeholder: 如：openjdk version "21.0.6" 2025-01-21 LTS
-
-  - type: checkboxes
-    id: revision
-    attributes:
-      label: 最后一步
-      description: 回顾您的回答
-      options:
-        - label: 我认为上述的描述已经足以详细, 以允许开发人员能复现该问题。如果我的 issue 没有按照上述的要求填写, 可能会被无条件关闭。
-          required: true
+      label: Minecraft / Loader 版本
+      description: 写出 Minecraft 版本和加载器，例如 1.21.1 NeoForge 或 1.20.1 Forge。
+      placeholder: 例如：1.21.1 NeoForge
+    validations:
+      required: true
 
   - type: textarea
-    id: other_message
+    id: modpack
     attributes:
-      label: 还有别的吗?
-      description: |
-        运行环境? 相关的硬件配置? 一些链接? 
-        或者可以给我们看的参考资料一类的? 
-        任何包括能让我们对你的问题有更多了解的信息内容都可以
+      label: 整合包 / 相关模组
+      description: 如果是在整合包中出现，请写整合包名称；如果与某个模组有关，也请写出模组名。
+      placeholder: 例如：ATM9、Create、Sophisticated Backpacks、GregTech Modern……
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志或崩溃报告（可选）
+      description: 如果有 crash report、latest.log 或服务端日志，请粘贴关键片段，或上传文件/链接。
       render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: 其他补充（可选）
+      description: 任何你觉得有帮助的上下文都可以写在这里。
+    validations:
+      required: false

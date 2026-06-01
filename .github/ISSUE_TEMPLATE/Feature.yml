@@ -1,27 +1,55 @@
-name: "新增内容建议"
-description: "新增内容"
-title: (将此栏[替换]为你的标题)
-labels: ["Feature", "待查看", "优先级：无"]
+name: 功能建议
+description: 新功能、体验优化、兼容方向或长期设计建议。
+title: "[提议] "
+labels: ["enhancement"]
 body:
-- type: checkboxes
-  id: "yml-1"
-  attributes:
-    label: "检查项"
-    description: "请检查以下项目, 并勾选确认。"
-    options:
-    - label: "我已在 [Issues 页面](https://github.com/Hcrab/RTSbuilding/issues) 中搜索, 确认了这一建议未被提交过。"
+  - type: markdown
+    attributes:
+      value: |
+        感谢建议！
+
+        标题不用写得很标准，也不需要自己判断分类、难度、优先级或标签。你只要描述“想解决什么问题”“希望怎么用”“现在哪里不顺手”即可；我们会在整理时统一改标题、加标签、拆分或合并 issue。
+
+        如果一个想法还不成熟，也可以先写出来。
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: 简单确认
+      description: 提交前请尽量确认以下内容。
+      options:
+        - label: 我已经在 Issues 页面简单搜索过，确认没有明显重复的建议。
+          required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: 这个建议想解决什么问题？
+      description: 可以描述你在游玩时遇到的不顺手、重复操作、缺少功能或兼容需求。
+      placeholder: 例如：大型建筑时希望能保存/加载蓝图；或者某个 UI 太占地方，希望能折叠。
+    validations:
       required: true
-- type: textarea
-  id: "yml-2"
-  attributes:
-    label: 描述
-    description: "详细描述具体内容。"
-  validations:
-    required: true
-- type: textarea
-  id: "yml-3"  
-  attributes:
-    label: "其他补充信息(可选)"
-    description: "如有其他需要说明的内容, 请在此补充。"
-  validations:
-    required: false  
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 你希望它怎么工作？
+      description: 写出你想象中的操作流程、按钮、快捷键、规则或限制。不确定也没关系。
+    validations:
+      required: false
+
+  - type: textarea
+    id: examples
+    attributes:
+      label: 参考例子（可选）
+      description: 可以贴其他模组、游戏、截图、视频或具体使用场景。
+    validations:
+      required: false
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: 其他补充（可选）
+      description: 任何你觉得有帮助的上下文都可以写在这里。
+    validations:
+      required: false
