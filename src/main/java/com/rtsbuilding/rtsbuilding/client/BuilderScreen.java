@@ -1,31 +1,15 @@
 package com.rtsbuilding.rtsbuilding.client;
 
-import java.util.ArrayList;
-import java.util.ArrayDeque;
-import java.util.Deque;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Set;
-
-import org.lwjgl.glfw.GLFW;
-
 import com.mojang.blaze3d.platform.InputConstants;
-import com.rtsbuilding.rtsbuilding.blueprint.client.BlueprintPanel;
 import com.rtsbuilding.rtsbuilding.blueprint.BlueprintReplaceRules;
-import com.rtsbuilding.rtsbuilding.compat.ae2.RtsAe2Compat;
+import com.rtsbuilding.rtsbuilding.blueprint.client.BlueprintPanel;
 import com.rtsbuilding.rtsbuilding.common.BuilderMode;
 import com.rtsbuilding.rtsbuilding.common.RtsUltimineCollector;
+import com.rtsbuilding.rtsbuilding.compat.ae2.RtsAe2Compat;
 import com.rtsbuilding.rtsbuilding.network.C2SRtsInteractPayload;
 import com.rtsbuilding.rtsbuilding.network.RtsStorageSort;
 import com.rtsbuilding.rtsbuilding.network.S2CRtsQuestDetectStatusPayload;
-import com.rtsbuilding.rtsbuilding.network.S2CRtsStoragePagePayload;
-import com.rtsbuilding.rtsbuilding.progression.RtsProgressionNode;
 import com.rtsbuilding.rtsbuilding.progression.RtsProgressionNodes;
-
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
@@ -38,18 +22,17 @@ import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.projectile.ProjectileUtil;
-import net.minecraft.world.item.Item;
 import net.minecraft.world.item.BlockItem;
-import net.minecraft.world.level.ClipContext;
-import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import net.minecraft.world.phys.AABB;
-import net.minecraft.world.phys.BlockHitResult;
-import net.minecraft.world.phys.EntityHitResult;
-import net.minecraft.world.phys.HitResult;
-import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.level.ClipContext;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.*;
 import net.neoforged.fml.ModList;
+import org.lwjgl.glfw.GLFW;
+
+import java.util.*;
 
 public final class BuilderScreen extends Screen {
     private static final int TOP_H = 52;
@@ -3986,7 +3969,7 @@ public final class BuilderScreen extends Screen {
             if (toolStack.isEmpty()) {
                 return;
             }
-            net.minecraft.resources.ResourceLocation id = BuiltInRegistries.ITEM.getKey(toolStack.getItem());
+            ResourceLocation id = BuiltInRegistries.ITEM.getKey(toolStack.getItem());
             if (id == null) {
                 return;
             }
@@ -5621,7 +5604,7 @@ public final class BuilderScreen extends Screen {
             if (itemId == null || itemId.isBlank()) {
                 return false;
             }
-            net.minecraft.resources.ResourceLocation key = net.minecraft.resources.ResourceLocation.tryParse(itemId);
+            ResourceLocation key = ResourceLocation.tryParse(itemId);
             if (key == null || !BuiltInRegistries.ITEM.containsKey(key)) {
                 return false;
             }
@@ -6428,7 +6411,7 @@ public final class BuilderScreen extends Screen {
             }
             ItemStack preview = this.controller.getQuickSlotPreview(pin);
             if (preview.isEmpty()) {
-                var id = net.minecraft.resources.ResourceLocation.tryParse(itemId);
+                var id = ResourceLocation.tryParse(itemId);
                 if (id == null || !BuiltInRegistries.ITEM.containsKey(id)) {
                     continue;
                 }
@@ -7440,7 +7423,7 @@ public final class BuilderScreen extends Screen {
     }
 
     private static String formatTabLabel(String tabKey) {
-        net.minecraft.resources.ResourceLocation key = net.minecraft.resources.ResourceLocation.tryParse(tabKey);
+        ResourceLocation key = ResourceLocation.tryParse(tabKey);
         String path = key == null ? tabKey : key.getPath();
         return humanizeToken(path);
     }
