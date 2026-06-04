@@ -121,17 +121,15 @@ dependencies {
     // Optional mod dependency with JEI (client-side recipe transfer integration)
     compileOnly "mezz.jei:jei-${jei_minecraft_version}-common-api:${jei_version}"
     compileOnly "mezz.jei:jei-${jei_minecraft_version}-neoforge-api:${jei_version}"
-    localRuntime "mezz.jei:jei-${jei_minecraft_version}-neoforge:${jei_version}"
 
-    // Runtime-only test pack. These mods are loaded by runClient/runServer for compatibility
-    // testing, but RTS building does not require them in published builds.
-    localRuntime("com.simibubi.create:create-${minecraft_version}:${create_version}:slim") {
-        transitive = false
-    }
-    localRuntime "net.createmod.ponder:ponder-neoforge:${ponder_version}+mc${minecraft_version}"
+    // Player-facing compatibility jars such as JEI, Create, and Sodium should be
+    // placed in run/mods for local testing. Loading Maven runtime artifacts here
+    // at the same time creates duplicate JPMS modules such as jei/jei.neoforge
+    // or create/create.slim, which does not match a real modpack launch.
     compileOnly "dev.engine-room.flywheel:flywheel-neoforge-api-${minecraft_version}:${flywheel_version}"
-    localRuntime "dev.engine-room.flywheel:flywheel-neoforge-${minecraft_version}:${flywheel_version}"
-    localRuntime "com.tterrag.registrate:Registrate:${registrate_version}"
+
+    // Runtime-only storage test pack. These mods are loaded by runClient/runServer for
+    // compatibility testing, but RTS building does not require them in published builds.
     localRuntime "maven.modrinth:sophisticated-core:${sophisticated_core_version}"
     localRuntime "maven.modrinth:sophisticated-storage:${sophisticated_storage_version}"
     localRuntime "maven.modrinth:pipez:${pipez_version}"

@@ -71,8 +71,8 @@ public final class TopBarPanel {
 
     /**
      * Renders the top bar: all mode/action buttons followed by a two-line
-     * status bar showing the current mode, selected item, storage link status,
-     * and shape-editing state.
+     * status bar showing the current mode, storage link status, and
+     * shape-editing state.
      */
     public void render(GuiGraphics g, int mouseX, int mouseY) {
         screen.ensureFillModeForShape(this.controller.getBuildShape());
@@ -82,7 +82,7 @@ public final class TopBarPanel {
         }
         renderTopGuideHint(g, topButtons);
 
-        // ---- Status bar row 1: mode + selected item ----
+        // ---- Status bar row 1: mode ----
         String modeText = switch (this.controller.getMode()) {
             case INTERACT -> screen.text("screen.rtsbuilding.status.mode", screen.text("screen.rtsbuilding.mode.interact"));
             case LINK_STORAGE -> screen.text("screen.rtsbuilding.status.mode", screen.text("screen.rtsbuilding.mode.link_storage"));
@@ -95,17 +95,7 @@ public final class TopBarPanel {
         String linked = this.controller.isStorageLinked()
                 ? screen.text("screen.rtsbuilding.status.storage_linked", this.controller.getLinkedStorageName())
                 : screen.text("screen.rtsbuilding.status.storage_not_linked");
-        String selected;
-        if (this.controller.hasSelectedFluid()) {
-            selected = screen.text("screen.rtsbuilding.status.selected_fluid", this.controller.getSelectedFluidLabel());
-        } else if (!this.controller.getSelectedItemLabel().isEmpty()) {
-            selected = screen.text("screen.rtsbuilding.status.selected_item", screen.selectedItemStatusLabel());
-        } else if (this.controller.isEmptyHandSelected()) {
-            selected = screen.text("screen.rtsbuilding.status.selected_empty_hand");
-        } else {
-            selected = screen.text("screen.rtsbuilding.status.selected_none");
-        }
-        String row1 = modeText + "    " + selected;
+        String row1 = modeText;
 
         // ---- Status bar row 2: storage, auto-store, fill, rotation, undo/redo ----
         String row2 = linked + (this.controller.isAutoStoreMinedDrops()

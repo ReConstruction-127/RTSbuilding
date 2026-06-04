@@ -502,6 +502,33 @@ public final class RtsStorageManager {
         return extractMatchingFromNetwork(handlers, player, item, count);
     }
 
+    public static long countBlueprintFluidMb(ServerPlayer player, Fluid fluid) {
+        if (player == null || fluid == null) {
+            return 0L;
+        }
+        Session session = SESSIONS.get(player.getUUID());
+        if (session == null) {
+            return 0L;
+        }
+        return RtsStorageFluids.countFluidInNetwork(session, resolveLinkedFluidHandlers(player, session), fluid);
+    }
+
+    public static boolean extractBlueprintFluid(ServerPlayer player, Fluid fluid, int amountMb) {
+        if (player == null || fluid == null || amountMb <= 0) {
+            return false;
+        }
+        Session session = SESSIONS.get(player.getUUID());
+        if (session == null) {
+            return false;
+        }
+        return RtsStorageFluids.extractFluidFromNetwork(
+                session,
+                resolveLinkedFluidHandlers(player, session),
+                fluid,
+                amountMb,
+                true) >= amountMb;
+    }
+
     public static void refundBlueprintMaterial(ServerPlayer player, ItemStack stack) {
         if (player == null || stack == null || stack.isEmpty()) {
             return;
@@ -676,7 +703,7 @@ public final class RtsStorageManager {
 
     public static void placeSelected(ServerPlayer player, BlockPos clickedPos, Direction face, double hitX, double hitY,
             double hitZ, byte rotateSteps, boolean forcePlace, boolean skipIfOccupied, String itemId,
-            double rayOriginX, double rayOriginY, double rayOriginZ,
+            ItemStack itemPrototype, double rayOriginX, double rayOriginY, double rayOriginZ,
             double rayDirX, double rayDirY, double rayDirZ, boolean quickBuild) {
         RtsStoragePlacement.placeSelected(
                 player,
@@ -690,6 +717,7 @@ public final class RtsStorageManager {
                 forcePlace,
                 skipIfOccupied,
                 itemId,
+                itemPrototype,
                 rayOriginX,
                 rayOriginY,
                 rayOriginZ,
@@ -701,7 +729,7 @@ public final class RtsStorageManager {
 
     public static void enqueuePlaceBatch(ServerPlayer player, List<BlockPos> clickedPositions, Direction face,
             byte rotateSteps, boolean forcePlace, boolean skipIfOccupied, String itemId,
-            double rayOriginX, double rayOriginY, double rayOriginZ,
+            ItemStack itemPrototype, double rayOriginX, double rayOriginY, double rayOriginZ,
             double rayDirX, double rayDirY, double rayDirZ) {
         RtsStoragePlacement.enqueuePlaceBatch(
                 player,
@@ -712,6 +740,7 @@ public final class RtsStorageManager {
                 forcePlace,
                 skipIfOccupied,
                 itemId == null ? "" : itemId,
+                itemPrototype,
                 rayOriginX,
                 rayOriginY,
                 rayOriginZ,

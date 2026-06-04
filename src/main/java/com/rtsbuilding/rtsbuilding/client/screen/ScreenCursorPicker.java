@@ -14,6 +14,8 @@ import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.phys.*;
 
 public final class ScreenCursorPicker {
+    private static final double BLUEPRINT_AIR_FALLBACK_DISTANCE = 24.0D;
+
     private BuilderScreen screen;
     private ClientRtsController controller;
     private ScreenShapeController shapeController;
@@ -212,13 +214,12 @@ public final class ScreenCursorPicker {
         }
         Vec3 camPos = mc.gameRenderer.getMainCamera().getPosition();
         Vec3 dir = computeCursorRayDirection();
-        if (Math.abs(dir.y) < 1.0E-5D) {
-            return null;
-        }
         double planeY = mc.player.blockPosition().getY();
-        double t = (planeY - camPos.y) / dir.y;
+        double t = Math.abs(dir.y) < 1.0E-5D
+                ? BLUEPRINT_AIR_FALLBACK_DISTANCE
+                : (planeY - camPos.y) / dir.y;
         if (t <= 0.0D || t > 128.0D) {
-            return null;
+            t = BLUEPRINT_AIR_FALLBACK_DISTANCE;
         }
         Vec3 hitVec = camPos.add(dir.scale(t));
         return new BlockHitResult(hitVec, Direction.UP, BlockPos.containing(hitVec), false);

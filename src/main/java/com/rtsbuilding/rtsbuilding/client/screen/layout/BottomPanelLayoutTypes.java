@@ -94,10 +94,12 @@ public final class BottomPanelLayoutTypes {
     /**
      * Bottom-panel tab selection.
      * <p>
-     * Determines which sub-panel is displayed: the item-storage browser
-     * ({@link #STORAGE}) or the blueprint library ({@link #BLUEPRINTS}).
+     * Determines which sub-panel is displayed: the creative picker
+     * ({@link #CREATIVE}), item-storage browser ({@link #STORAGE}), or the
+     * blueprint library ({@link #BLUEPRINTS}).
      */
     public enum BottomPanelTab {
+        CREATIVE,
         STORAGE,
         BLUEPRINTS
     }

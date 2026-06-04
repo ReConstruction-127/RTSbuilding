@@ -9,6 +9,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.RenderShape;
@@ -19,6 +20,8 @@ import net.minecraft.world.level.block.state.BlockState;
  * 负责在BuilderScreen中渲染蓝图的3D幽灵预览，包括方块模型和缺失标记
  */
 public final class BlueprintGhostRenderer {
+    private static final float GHOST_BLOCK_ALPHA = 0.30F;
+    private static final float TRUNCATED_BOX_ALPHA = 0.22F;
 
     /**
      * 私有构造函数，防止实例化
@@ -62,6 +65,7 @@ public final class BlueprintGhostRenderer {
 
         boolean renderedBlockModels = false;
         MultiBufferSource.BufferSource blockBuffer = minecraft.renderBuffers().bufferSource();
+        MultiBufferSource translucentBlockBuffer = new AlphaBlockPreviewBufferSource(blockBuffer, GHOST_BLOCK_ALPHA);
 
         // 遍历所有蓝图方块
         for (BlueprintPanel.BlueprintGhostBlock block : preview.blocks()) {
@@ -87,7 +91,7 @@ public final class BlueprintGhostRenderer {
                 minecraft.getBlockRenderer().renderSingleBlock(
                         state,
                         poseStack,
-                        blockBuffer,
+                        translucentBlockBuffer,
                         LightTexture.FULL_BRIGHT,  // 使用最大亮度，不受光照影响
                         OverlayTexture.NO_OVERLAY);
                 poseStack.popPose();
@@ -125,7 +129,7 @@ public final class BlueprintGhostRenderer {
         // 渲染整体包围盒边框
         if (minX != Integer.MAX_VALUE) {
             // 如果蓝图被截断（方块数量过多），降低透明度
-            float alpha = preview.truncated() ? 0.55F : 0.75F;
+            float alpha = preview.truncated() ? TRUNCATED_BOX_ALPHA : GHOST_BLOCK_ALPHA;
             LevelRenderer.renderLineBox(
                     poseStack,
                     lineBuffer,
@@ -133,6 +137,56 @@ public final class BlueprintGhostRenderer {
                     maxX + 0.02D, maxY + 0.02D, maxZ + 0.02D,
                     lineR, lineG, lineB,
                     alpha);
+        }
+    }
+
+    /**
+     * Routes preview block models through the translucent layer and applies a
+     * fixed alpha. Blueprint previews are not real blocks yet, so they should
+     * stay readable without blocking the player's view while following the mouse.
+     */
+    private record AlphaBlockPreviewBufferSource(MultiBufferSource delegate, float alpha) implements MultiBufferSource {
+        @Override
+        public VertexConsumer getBuffer(RenderType renderType) {
+            return new AlphaVertexConsumer(delegate.getBuffer(RenderType.translucent()), alpha);
+        }
+    }
+
+    private record AlphaVertexConsumer(VertexConsumer delegate, float alpha) implements VertexConsumer {
+        @Override
+        public VertexConsumer addVertex(float x, float y, float z) {
+            delegate.addVertex(x, y, z);
+            return this;
+        }
+
+        @Override
+        public VertexConsumer setColor(int red, int green, int blue, int alpha) {
+            delegate.setColor(red, green, blue, Math.round(alpha * this.alpha));
+            return this;
+        }
+
+        @Override
+        public VertexConsumer setUv(float u, float v) {
+            delegate.setUv(u, v);
+            return this;
+        }
+
+        @Override
+        public VertexConsumer setUv1(int u, int v) {
+            delegate.setUv1(u, v);
+            return this;
+        }
+
+        @Override
+        public VertexConsumer setUv2(int u, int v) {
+            delegate.setUv2(u, v);
+            return this;
+        }
+
+        @Override
+        public VertexConsumer setNormal(float x, float y, float z) {
+            delegate.setNormal(x, y, z);
+            return this;
         }
     }
 }

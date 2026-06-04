@@ -1693,6 +1693,9 @@ public final class ClientRtsController {
     }
 
     private boolean shouldAutoClearSelectedItemWhenUnavailable() {
+        if (isLocalPlayerCreative()) {
+            return false;
+        }
         return this.selectedItemPreview != null
                 && !this.selectedItemPreview.isEmpty()
                 && this.selectedItemPreview.getItem() instanceof BlockItem;
@@ -2210,11 +2213,13 @@ public final class ClientRtsController {
             itemId = "";
         }
         boolean clearAfterPlace = !itemId.isBlank() && autoClearUnavailable && selectedCount <= 1L;
+        ItemStack itemPrototype = itemId.isBlank() ? ItemStack.EMPTY : this.selectedItemPreview;
         RtsClientPacketGateway.sendPlace(
                 hit,
                 forcePlace,
                 skipIfOccupied,
                 itemId,
+                itemPrototype,
                 itemId.isBlank() ? 0 : this.placeRotateSteps,
                 rayOrigin,
                 rayDir,
@@ -2244,6 +2249,7 @@ public final class ClientRtsController {
                 forcePlace,
                 skipIfOccupied,
                 itemId,
+                itemId.isBlank() ? ItemStack.EMPTY : this.selectedItemPreview,
                 itemId.isBlank() ? 0 : this.placeRotateSteps,
                 rayOrigin,
                 rayDir);
@@ -2351,7 +2357,7 @@ public final class ClientRtsController {
 
     public void interactEmpty(BlockHitResult hit, Vec3 rayOrigin, Vec3 rayDir) {
         beginRemoteMenuOpenGrace();
-        RtsClientPacketGateway.sendPlace(hit, false, false, "", 0, rayOrigin, rayDir);
+        RtsClientPacketGateway.sendPlace(hit, false, false, "", ItemStack.EMPTY, 0, rayOrigin, rayDir);
     }
 
     public void interactBlockWithToolSlot(BlockHitResult hit, int toolSlot, Vec3 rayOrigin, Vec3 rayDir) {
@@ -2524,7 +2530,15 @@ public final class ClientRtsController {
         if (itemId == null || itemId.isBlank()) {
             return Long.MAX_VALUE;
         }
+        if (isLocalPlayerCreative()) {
+            return Long.MAX_VALUE;
+        }
         return hasStoragePageSnapshot() ? getStorageTotalCount(itemId) : Long.MAX_VALUE;
+    }
+
+    private boolean isLocalPlayerCreative() {
+        Minecraft minecraft = Minecraft.getInstance();
+        return minecraft != null && minecraft.player != null && minecraft.player.isCreative();
     }
 
     private void setSelectedItem(String itemId, String label, ItemStack preview) {

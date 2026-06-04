@@ -10,6 +10,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
+import net.neoforged.fml.ModList;
 
 import java.util.*;
 
@@ -36,6 +37,7 @@ public final class BottomPanel {
     public int hoveredEntry = -1;
     public int hoveredRecentEntry = -1;
     public int hoveredFluidEntry = -1;
+    public int hoveredCreativeEntry = -1;
     public int hoveredCraftableEntry = -1;
     public int hoveredToolSlot = -1;
     public boolean hoveredEmptyHandSlot = false;
@@ -45,6 +47,9 @@ public final class BottomPanel {
 
     public String craftSearchDraft;
     public int lastCraftablesStorageRevision = -1;
+    private String creativeCategory = "all";
+    private String creativeSearch = "";
+    private int creativePage = 0;
 
     public void init(BuilderScreen screen, ClientRtsController controller) {
         this.screen = screen;
@@ -55,6 +60,7 @@ public final class BottomPanel {
 
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         BottomPanelLayoutTypes.BottomPanelLayout layout = resolveBottomPanelLayout();
+        BottomPanelLayoutTypes.BottomPanelTab activeTab = activeBottomPanelTab();
         int bottomH = layout.panelH();
         int bottomY = layout.panelY();
         int sortX = layout.sortX();
@@ -79,7 +85,7 @@ public final class BottomPanel {
         g.fill(guideX, guideY, guideX + 12, guideY + 12, guideHover ? 0xCC41576F : 0xAA2B3542);
         g.drawCenteredString(screen.font(), "i", guideX + 6, guideY + 2, 0xEAF4FF);
 
-        if (this.bottomPanelTab == BottomPanelLayoutTypes.BottomPanelTab.BLUEPRINTS) {
+        if (activeTab == BottomPanelLayoutTypes.BottomPanelTab.BLUEPRINTS) {
             int contentX = layout.panelX() + BOTTOM_PANEL_PADDING;
             int contentY = layout.panelY() + BOTTOM_PANEL_HEADER_H + 4;
             int contentW = Math.max(80, layout.panelW() - BOTTOM_PANEL_PADDING * 2);
@@ -109,6 +115,9 @@ public final class BottomPanel {
         int searchFieldW = computeSearchFieldWidth(searchW);
 
         if (screen.getSearchBox() != null) {
+            if (!screen.getSearchBox().isFocused()) {
+                syncSearchBoxForActiveTab();
+            }
             var sb = screen.getSearchBox();
             sb.setX(storageX);
             sb.setY(storageY);
@@ -119,7 +128,7 @@ public final class BottomPanel {
         }
 
         int pagerX = layout.pagerX();
-        drawPager(g, pagerX, storageY);
+        drawPager(g, pagerX, storageY, layout);
 
         renderToolArea(g, mouseX, mouseY, storageX, layout.toolY(), mainStorageW);
 
@@ -127,6 +136,14 @@ public final class BottomPanel {
         int gridH = layout.gridH();
         int craftPanelY = layout.craftPanelY();
         int craftPanelH = layout.craftPanelH();
+        if (activeTab == BottomPanelLayoutTypes.BottomPanelTab.CREATIVE) {
+            int creativeGridW = creativeGridWidth(mainStorageW);
+            int recentGridX = storageX + creativeGridW + STORAGE_RECENT_GAP;
+            int recentGridW = Math.max(SLOT, mainStorageW - creativeGridW - STORAGE_RECENT_GAP);
+            drawCreativeGrid(g, mouseX, mouseY, storageX, gridY, creativeGridW, gridH);
+            drawRecentGrid(g, mouseX, mouseY, recentGridX, gridY, recentGridW, gridH);
+            return;
+        }
         int fluidW = getFluidStripWidth(mainStorageW);
         int itemGridX = storageX;
         int itemGridW = mainStorageW;
@@ -153,20 +170,10 @@ public final class BottomPanel {
         int labelX = layout.panelX() + 8;
         int labelY = layout.panelY() + 5;
         g.drawString(screen.font(), "RTS", labelX, labelY, 0xF2F6FB);
-        drawBottomPanelTab(
-                g,
-                layout,
-                BottomPanelLayoutTypes.BottomPanelTab.STORAGE,
-                Component.translatable("screen.rtsbuilding.storage.tab").getString(),
-                mouseX,
-                mouseY);
-        drawBottomPanelTab(
-                g,
-                layout,
-                BottomPanelLayoutTypes.BottomPanelTab.BLUEPRINTS,
-                Component.translatable("screen.rtsbuilding.blueprints.tab").getString(),
-                mouseX,
-                mouseY);
+        drawSelectedPlacementStatus(g, layout);
+        for (BottomPanelLayoutTypes.BottomPanelTab tab : visibleBottomPanelTabs()) {
+            drawBottomPanelTab(g, layout, tab, bottomPanelTabLabel(tab), mouseX, mouseY);
+        }
     }
 
     private void drawBottomPanelTab(
@@ -179,7 +186,7 @@ public final class BottomPanel {
         int x = bottomPanelTabX(layout, tab);
         int y = layout.panelY() + 2;
         int w = bottomPanelTabW(tab);
-        boolean active = this.bottomPanelTab == tab;
+        boolean active = activeBottomPanelTab() == tab;
         boolean hover = inside(mouseX, mouseY, x, y, w, BOTTOM_PANEL_HEADER_H - 3);
         int fill = active ? 0xCC355B4C : hover ? 0xAA334052 : 0x8826303B;
         RtsClientUiUtil.drawPanelFrame(g, x, y, w, BOTTOM_PANEL_HEADER_H - 3, fill,
@@ -189,15 +196,105 @@ public final class BottomPanel {
     }
 
     private int bottomPanelTabX(BottomPanelLayoutTypes.BottomPanelLayout layout, BottomPanelLayoutTypes.BottomPanelTab tab) {
-        int storageX = layout.panelX() + 38;
-        if (tab == BottomPanelLayoutTypes.BottomPanelTab.STORAGE) {
-            return storageX;
+        int x = layout.panelX() + 38;
+        for (BottomPanelLayoutTypes.BottomPanelTab visible : visibleBottomPanelTabs()) {
+            if (visible == BottomPanelLayoutTypes.BottomPanelTab.BLUEPRINTS) {
+                x += selectedPlacementStatusW(layout) + 4;
+            }
+            if (visible == tab) {
+                return x;
+            }
+            x += bottomPanelTabW(visible) + 4;
         }
-        return storageX + bottomPanelTabW(BottomPanelLayoutTypes.BottomPanelTab.STORAGE) + 4;
+        return x;
+    }
+
+    private void drawSelectedPlacementStatus(GuiGraphics g, BottomPanelLayoutTypes.BottomPanelLayout layout) {
+        int x = selectedPlacementStatusX(layout);
+        int w = selectedPlacementStatusW(layout);
+        if (x < 0 || w <= 0) {
+            return;
+        }
+        int y = layout.panelY() + 6;
+        g.drawString(screen.font(), screen.trimToWidth(selectedPlacementStatusText(), w), x, y, 0xFFD8E2EE);
+    }
+
+    private int selectedPlacementStatusX(BottomPanelLayoutTypes.BottomPanelLayout layout) {
+        int x = layout.panelX() + 38;
+        for (BottomPanelLayoutTypes.BottomPanelTab visible : visibleBottomPanelTabs()) {
+            if (visible == BottomPanelLayoutTypes.BottomPanelTab.BLUEPRINTS) {
+                return x;
+            }
+            x += bottomPanelTabW(visible) + 4;
+        }
+        return -1;
+    }
+
+    private int selectedPlacementStatusW(BottomPanelLayoutTypes.BottomPanelLayout layout) {
+        int x = selectedPlacementStatusX(layout);
+        if (x < 0) {
+            return 0;
+        }
+        int reservedRight = bottomPanelTabW(BottomPanelLayoutTypes.BottomPanelTab.BLUEPRINTS) + 50;
+        int available = Math.max(0, layout.panelX() + layout.panelW() - x - reservedRight);
+        if (available <= 0) {
+            return 0;
+        }
+        int desired = screen.font().width(selectedPlacementStatusText()) + 8;
+        int max = Math.min(190, available);
+        return Mth.clamp(desired, Math.min(96, max), max);
+    }
+
+    private String selectedPlacementStatusText() {
+        if (this.controller.hasSelectedFluid()) {
+            return screen.text("screen.rtsbuilding.status.selected_fluid", this.controller.getSelectedFluidLabel());
+        }
+        if (!this.controller.getSelectedItemLabel().isEmpty()) {
+            return screen.text("screen.rtsbuilding.status.selected_item", screen.selectedItemStatusLabel());
+        }
+        if (this.controller.isEmptyHandSelected()) {
+            return screen.text("screen.rtsbuilding.status.selected_empty_hand");
+        }
+        return screen.text("screen.rtsbuilding.status.selected_none");
     }
 
     private int bottomPanelTabW(BottomPanelLayoutTypes.BottomPanelTab tab) {
+        if (tab == BottomPanelLayoutTypes.BottomPanelTab.CREATIVE) {
+            return 58;
+        }
         return tab == BottomPanelLayoutTypes.BottomPanelTab.STORAGE ? 76 : 86;
+    }
+
+    private List<BottomPanelLayoutTypes.BottomPanelTab> visibleBottomPanelTabs() {
+        if (isCreativePlayer()) {
+            return List.of(
+                    BottomPanelLayoutTypes.BottomPanelTab.CREATIVE,
+                    BottomPanelLayoutTypes.BottomPanelTab.STORAGE,
+                    BottomPanelLayoutTypes.BottomPanelTab.BLUEPRINTS);
+        }
+        return List.of(BottomPanelLayoutTypes.BottomPanelTab.STORAGE, BottomPanelLayoutTypes.BottomPanelTab.BLUEPRINTS);
+    }
+
+    private BottomPanelLayoutTypes.BottomPanelTab activeBottomPanelTab() {
+        if (this.bottomPanelTab == BottomPanelLayoutTypes.BottomPanelTab.CREATIVE && !isCreativePlayer()) {
+            return BottomPanelLayoutTypes.BottomPanelTab.STORAGE;
+        }
+        return this.bottomPanelTab;
+    }
+
+    private boolean isCreativePlayer() {
+        Minecraft mc = Minecraft.getInstance();
+        return mc != null && mc.player != null && mc.player.isCreative();
+    }
+
+    private String bottomPanelTabLabel(BottomPanelLayoutTypes.BottomPanelTab tab) {
+        if (tab == BottomPanelLayoutTypes.BottomPanelTab.CREATIVE) {
+            return Component.translatable("screen.rtsbuilding.creative.tab").getString();
+        }
+        if (tab == BottomPanelLayoutTypes.BottomPanelTab.BLUEPRINTS) {
+            return Component.translatable("screen.rtsbuilding.blueprints.tab").getString();
+        }
+        return Component.translatable("screen.rtsbuilding.storage.tab").getString();
     }
 
     // ── 工具栏 ├── 热键栏/固定位 ──
@@ -317,14 +414,19 @@ public final class BottomPanel {
         g.drawCenteredString(screen.font(), label, x + SORT_BUTTON_SIZE / 2, y + 4, 0xFFFFFF);
     }
 
-    private void drawPager(GuiGraphics g, int x, int y) {
+    private void drawPager(GuiGraphics g, int x, int y, BottomPanelLayoutTypes.BottomPanelLayout layout) {
+        int page = this.controller.getStoragePage();
+        int totalPages = this.controller.getStorageTotalPages();
+        if (activeBottomPanelTab() == BottomPanelLayoutTypes.BottomPanelTab.CREATIVE) {
+            totalPages = creativePageCount(creativeGridWidth(layout.mainStorageW()), layout.gridH());
+            this.creativePage = Mth.clamp(this.creativePage, 0, totalPages - 1);
+            page = this.creativePage;
+        }
         g.fill(x, y, x + 16, y + 14, 0xAA2A2A2A);
         g.drawString(screen.font(), "<", x + 5, y + 3, 0xFFFFFF);
         g.fill(x + 58, y, x + 74, y + 14, 0xAA2A2A2A);
         g.drawString(screen.font(), ">", x + 63, y + 3, 0xFFFFFF);
-        g.drawString(screen.font(),
-                (this.controller.getStoragePage() + 1) + "/" + this.controller.getStorageTotalPages(),
-                x + 19, y + 3, 0xFFFFFF);
+        g.drawString(screen.font(), (page + 1) + "/" + totalPages, x + 19, y + 3, 0xFFFFFF);
     }
 
     private int computeSearchFieldWidth(int searchAreaWidth) {
@@ -381,7 +483,7 @@ public final class BottomPanel {
             }
             CategoryTypes.CategoryRow category = rows.get(index);
             int rowY = listY + row * CATEGORY_ROW_H;
-            boolean selected = category.token().equals(this.controller.getStorageCategory());
+            boolean selected = category.token().equals(activeCategoryToken());
             int bg = selected ? 0xFF335E4C : 0x66343A47;
             g.fill(x + 2, rowY, x + width - 2, rowY + CATEGORY_ROW_H - 2, bg);
             int textColor = selected ? 0xFFFFFF : 0xE0E0E0;
@@ -472,6 +574,57 @@ public final class BottomPanel {
         int centerY = y + Math.max(8, height / 2 - 10);
         g.drawCenteredString(screen.font(), screen.trimToWidth(title.getString(), messageW), x + width / 2, centerY, 0xFFE7C46A);
         g.drawCenteredString(screen.font(), screen.trimToWidth(detail.getString(), messageW), x + width / 2, centerY + 12, 0xFFB8C7D6);
+    }
+
+    /**
+     * Draws the creative picker as a client-only item source. Selecting an item here
+     * only changes the RTS placement preview; it does not request storage extraction
+     * and does not mutate the player's inventory.
+     */
+    private void drawCreativeGrid(GuiGraphics g, int mouseX, int mouseY, int x, int y, int width, int height) {
+        int cols = Math.max(1, width / SLOT);
+        int rows = Math.max(1, height / SLOT);
+        int maxSlots = cols * rows;
+        List<RtsCreativeItemCatalog.CreativeEntry> entries = creativeEntriesForCurrentFilter();
+        int pageCount = Math.max(1, (int) Math.ceil(entries.size() / (double) maxSlots));
+        this.creativePage = Mth.clamp(this.creativePage, 0, pageCount - 1);
+        int start = this.creativePage * maxSlots;
+
+        for (int i = 0; i < maxSlots; i++) {
+            int cx = x + (i % cols) * SLOT;
+            int cy = y + (i / cols) * SLOT;
+            int box = SLOT - 2;
+            g.fill(cx, cy, cx + box, cy + box, 0xAA11151D);
+            g.hLine(cx, cx + box, cy, 0xFF596D84);
+            g.hLine(cx, cx + box, cy + box, 0xFF10151B);
+            g.vLine(cx, cy, cy + box, 0xFF596D84);
+            g.vLine(cx + box, cy, cy + box, 0xFF10151B);
+
+            int index = start + i;
+            if (index >= entries.size()) {
+                continue;
+            }
+            RtsCreativeItemCatalog.CreativeEntry entry = entries.get(index);
+            boolean selected = !this.controller.getSelectedItemPreview().isEmpty()
+                    && net.minecraft.world.item.ItemStack.isSameItemSameComponents(entry.stack(), this.controller.getSelectedItemPreview());
+            if (selected) {
+                g.fill(cx + 1, cy + 1, cx + box - 1, cy + box - 1, 0x3326C56D);
+            }
+            g.renderItem(entry.stack(), cx + 2, cy + 2);
+            if (inside(mouseX, mouseY, cx, cy, box, box)) {
+                this.hoveredCreativeEntry = index;
+                g.fill(cx + 1, cy + 1, cx + box - 1, cy + box - 1, selected ? 0x3340FF80 : 0x22FFFFFF);
+            }
+        }
+
+        if (entries.isEmpty()) {
+            int messageW = Math.max(24, width - 12);
+            int centerY = y + Math.max(8, height / 2 - 10);
+            Component title = Component.translatable("screen.rtsbuilding.creative.empty");
+            Component detail = Component.translatable("screen.rtsbuilding.creative.empty.detail");
+            g.drawCenteredString(screen.font(), screen.trimToWidth(title.getString(), messageW), x + width / 2, centerY, 0xFFE7C46A);
+            g.drawCenteredString(screen.font(), screen.trimToWidth(detail.getString(), messageW), x + width / 2, centerY + 12, 0xFFB8C7D6);
+        }
     }
 
     private void drawRecentGrid(GuiGraphics g, int mouseX, int mouseY, int x, int y, int width, int height) {
@@ -710,6 +863,7 @@ public final class BottomPanel {
 
     public boolean handleClick(double mouseX, double mouseY) {
         BottomPanelLayoutTypes.BottomPanelLayout layout = resolveBottomPanelLayout();
+        BottomPanelLayoutTypes.BottomPanelTab activeTab = activeBottomPanelTab();
         if (!layout.contains(mouseX, mouseY)) {
             return false;
         }
@@ -717,13 +871,16 @@ public final class BottomPanel {
         BottomPanelLayoutTypes.BottomPanelTab clickedTab = resolveBottomPanelTabClick(layout, mouseX, mouseY);
         if (clickedTab != null) {
             this.bottomPanelTab = clickedTab;
+            syncSearchBoxForActiveTab();
             screen.blurSearchFocus();
             screen.closeGearMenu();
             return true;
         }
         if (inside(mouseX, mouseY, bottomRefreshButtonX(layout), bottomGuideButtonY(layout), 12, 12)) {
-            if (this.bottomPanelTab == BottomPanelLayoutTypes.BottomPanelTab.BLUEPRINTS) {
+            if (activeTab == BottomPanelLayoutTypes.BottomPanelTab.BLUEPRINTS) {
                 BlueprintPanel.reload();
+            } else if (activeTab == BottomPanelLayoutTypes.BottomPanelTab.CREATIVE) {
+                this.creativePage = 0;
             } else {
                 this.controller.refreshStoragePage();
             }
@@ -738,7 +895,7 @@ public final class BottomPanel {
         if (layout.isInsideHeader(mouseX, mouseY)) {
             return true;
         }
-        if (this.bottomPanelTab == BottomPanelLayoutTypes.BottomPanelTab.BLUEPRINTS) {
+        if (activeTab == BottomPanelLayoutTypes.BottomPanelTab.BLUEPRINTS) {
             int contentX = layout.panelX() + BOTTOM_PANEL_PADDING;
             int contentY = layout.panelY() + BOTTOM_PANEL_HEADER_H + 4;
             int contentW = Math.max(80, layout.panelW() - BOTTOM_PANEL_PADDING * 2);
@@ -769,7 +926,8 @@ public final class BottomPanel {
             return true;
         }
 
-        if (handleCraftablesPanelLeftClick(mouseX, mouseY, layout.craftPanelX(), craftPanelY, CRAFT_PANEL_W, craftPanelH)) {
+        if (activeTab != BottomPanelLayoutTypes.BottomPanelTab.CREATIVE
+                && handleCraftablesPanelLeftClick(mouseX, mouseY, layout.craftPanelX(), craftPanelY, CRAFT_PANEL_W, craftPanelH)) {
             return true;
         }
 
@@ -810,6 +968,18 @@ public final class BottomPanel {
 
         CategoryTypes.CategoryClick categoryClick = resolveClickedCategoryAction(mouseX, mouseY);
         if (categoryClick != null) {
+            if (activeTab == BottomPanelLayoutTypes.BottomPanelTab.CREATIVE) {
+                if (categoryClick.toggleExpandOnly()) {
+                    toggleCategoryExpansion(categoryClick.modNamespace());
+                    return true;
+                }
+                this.creativeCategory = categoryClick.categoryToken();
+                this.creativePage = 0;
+                if (categoryClick.modNamespace() != null && !categoryClick.modNamespace().isBlank()) {
+                    this.expandedCategoryMods.add(categoryClick.modNamespace());
+                }
+                return true;
+            }
             if (categoryClick.toggleExpandOnly()) {
                 toggleCategoryExpansion(categoryClick.modNamespace());
                 return true;
@@ -826,11 +996,39 @@ public final class BottomPanel {
         }
 
         if (inside(mouseX, mouseY, pagerX, layout.storageY(), 16, 14)) {
-            this.controller.prevPage();
+            if (activeTab == BottomPanelLayoutTypes.BottomPanelTab.CREATIVE) {
+                this.creativePage = Mth.clamp(this.creativePage - 1, 0, creativePageCount(creativeGridWidth(mainStorageW), gridH) - 1);
+            } else {
+                this.controller.prevPage();
+            }
             return true;
         }
         if (inside(mouseX, mouseY, pagerX + 58, layout.storageY(), 16, 14)) {
-            this.controller.nextPage();
+            if (activeTab == BottomPanelLayoutTypes.BottomPanelTab.CREATIVE) {
+                this.creativePage = Mth.clamp(this.creativePage + 1, 0, creativePageCount(creativeGridWidth(mainStorageW), gridH) - 1);
+            } else {
+                this.controller.nextPage();
+            }
+            return true;
+        }
+
+        if (activeTab == BottomPanelLayoutTypes.BottomPanelTab.CREATIVE) {
+            int creativeGridW = creativeGridWidth(mainStorageW);
+            int recentGridX = storageX + creativeGridW + STORAGE_RECENT_GAP;
+            int recentGridW = Math.max(SLOT, mainStorageW - creativeGridW - STORAGE_RECENT_GAP);
+            int creativeIndex = resolveClickedCreativeEntry(mouseX, mouseY, storageX, gridY, creativeGridW, gridH);
+            if (creativeIndex >= 0) {
+                RtsCreativeItemCatalog.CreativeEntry entry = getCreativeEntryForTooltip(creativeIndex);
+                if (entry != null) {
+                    this.controller.selectItemForPlacement(entry.itemId(), entry.label(), entry.stack());
+                }
+                return true;
+            }
+            int recentIndex = resolveClickedRecentEntry(mouseX, mouseY, recentGridX, gridY, recentGridW, gridH);
+            if (recentIndex >= 0) {
+                this.controller.selectRecentEntry(recentIndex);
+                return true;
+            }
             return true;
         }
 
@@ -863,13 +1061,14 @@ public final class BottomPanel {
 
     public boolean handleRightClick(double mouseX, double mouseY) {
         BottomPanelLayoutTypes.BottomPanelLayout layout = resolveBottomPanelLayout();
+        BottomPanelLayoutTypes.BottomPanelTab activeTab = activeBottomPanelTab();
         if (!layout.contains(mouseX, mouseY)) {
             return false;
         }
         if (layout.isInsideHeader(mouseX, mouseY)) {
             return true;
         }
-        if (this.bottomPanelTab == BottomPanelLayoutTypes.BottomPanelTab.BLUEPRINTS) {
+        if (activeTab == BottomPanelLayoutTypes.BottomPanelTab.BLUEPRINTS) {
             return true;
         }
 
@@ -889,7 +1088,12 @@ public final class BottomPanel {
             return true;
         }
 
-        if (handleCraftablesPanelRightClick(mouseX, mouseY, layout.craftPanelX(), layout.craftPanelY(), CRAFT_PANEL_W, layout.craftPanelH())) {
+        if (activeTab != BottomPanelLayoutTypes.BottomPanelTab.CREATIVE
+                && handleCraftablesPanelRightClick(mouseX, mouseY, layout.craftPanelX(), layout.craftPanelY(), CRAFT_PANEL_W, layout.craftPanelH())) {
+            return true;
+        }
+
+        if (activeTab == BottomPanelLayoutTypes.BottomPanelTab.CREATIVE) {
             return true;
         }
 
@@ -908,12 +1112,25 @@ public final class BottomPanel {
 
     public boolean handleMouseScrolled(double mouseX, double mouseY, double scrollY) {
         BottomPanelLayoutTypes.BottomPanelLayout layout = resolveBottomPanelLayout();
-        if (this.bottomPanelTab == BottomPanelLayoutTypes.BottomPanelTab.BLUEPRINTS) {
+        BottomPanelLayoutTypes.BottomPanelTab activeTab = activeBottomPanelTab();
+        if (activeTab == BottomPanelLayoutTypes.BottomPanelTab.BLUEPRINTS) {
             int contentX = layout.panelX() + BOTTOM_PANEL_PADDING;
             int contentY = layout.panelY() + BOTTOM_PANEL_HEADER_H + 4;
             int contentW = Math.max(80, layout.panelW() - BOTTOM_PANEL_PADDING * 2);
             int contentH = Math.max(24, layout.panelH() - BOTTOM_PANEL_HEADER_H - 8);
             BlueprintPanel.mouseScrolled(mouseX, mouseY, scrollY, contentX, contentY, contentW, contentH);
+            return true;
+        }
+        if (activeTab == BottomPanelLayoutTypes.BottomPanelTab.CREATIVE) {
+            if (isInsideCategoryList(mouseX, mouseY)) {
+                shiftCategoryScroll(scrollY > 0.0D ? -1 : 1);
+                return true;
+            }
+            int delta = scrollY > 0.0D ? -1 : 1;
+            this.creativePage = Mth.clamp(
+                    this.creativePage + delta,
+                    0,
+                    creativePageCount(creativeGridWidth(layout.mainStorageW()), layout.gridH()) - 1);
             return true;
         }
         if (inside(mouseX, mouseY, layout.craftPanelX(), layout.craftPanelY(), CRAFT_PANEL_W, layout.craftPanelH())) {
@@ -995,9 +1212,32 @@ public final class BottomPanel {
             return false;
         }
         sb.setValue("");
-        this.controller.setStorageSearch("");
+        handleStorageSearchChanged("");
         screen.blurSearchFocus();
         return true;
+    }
+
+    public void handleStorageSearchChanged(String value) {
+        String next = value == null ? "" : value;
+        if (activeBottomPanelTab() == BottomPanelLayoutTypes.BottomPanelTab.CREATIVE) {
+            this.creativeSearch = next;
+            this.creativePage = 0;
+            return;
+        }
+        this.controller.setStorageSearch(next);
+    }
+
+    private void syncSearchBoxForActiveTab() {
+        var sb = screen.getSearchBox();
+        if (sb == null) {
+            return;
+        }
+        String expected = activeBottomPanelTab() == BottomPanelLayoutTypes.BottomPanelTab.CREATIVE
+                ? this.creativeSearch
+                : this.controller.getStorageSearch();
+        if (!expected.equals(sb.getValue())) {
+            sb.setValue(expected);
+        }
     }
 
     private boolean handleToolRowClick(double mouseX, double mouseY, int storageX, int rowY, int storageW) {
@@ -1318,7 +1558,7 @@ public final class BottomPanel {
     }
 
     private BottomPanelLayoutTypes.BottomPanelTab resolveBottomPanelTabClick(BottomPanelLayoutTypes.BottomPanelLayout layout, double mouseX, double mouseY) {
-        for (BottomPanelLayoutTypes.BottomPanelTab tab : BottomPanelLayoutTypes.BottomPanelTab.values()) {
+        for (BottomPanelLayoutTypes.BottomPanelTab tab : visibleBottomPanelTabs()) {
             if (inside(mouseX, mouseY, bottomPanelTabX(layout, tab), layout.panelY() + 2, bottomPanelTabW(tab), BOTTOM_PANEL_HEADER_H - 3)) {
                 return tab;
             }
@@ -1341,6 +1581,35 @@ public final class BottomPanel {
     // ── 分类构建 ──
 
     private List<CategoryTypes.CategoryRow> buildCategoryRows() {
+        if (activeBottomPanelTab() == BottomPanelLayoutTypes.BottomPanelTab.CREATIVE) {
+            List<CategoryTypes.CategoryRow> rows = new ArrayList<>();
+            String selected = normalizeCategoryToken(this.creativeCategory);
+            if (selected.startsWith(CATEGORY_TAB_PREFIX)) {
+                String payload = selected.substring(CATEGORY_TAB_PREFIX.length());
+                int split = payload.indexOf('|');
+                if (split > 0) {
+                    this.expandedCategoryMods.add(payload.substring(0, split));
+                }
+            }
+            for (RtsCreativeItemCatalog.CreativeCategory category : RtsCreativeItemCatalog.get().categories()) {
+                if (category.depth() > 0 && !this.expandedCategoryMods.contains(category.modNamespace())) {
+                    continue;
+                }
+                String label = "all".equals(category.token())
+                        ? Component.translatable("screen.rtsbuilding.creative.all").getString()
+                        : category.label();
+                boolean expanded = category.expandable() && this.expandedCategoryMods.contains(category.modNamespace());
+                rows.add(new CategoryTypes.CategoryRow(
+                        category.token(),
+                        label,
+                        category.depth(),
+                        category.expandable(),
+                        expanded,
+                        category.modNamespace()));
+            }
+            return rows;
+        }
+
         List<CategoryTypes.CategoryRow> rows = new ArrayList<>();
         rows.add(new CategoryTypes.CategoryRow(CATEGORY_ALL, "All", 0, false, false, ""));
 
@@ -1409,6 +1678,32 @@ public final class BottomPanel {
         return rows;
     }
 
+    private String activeCategoryToken() {
+        return activeBottomPanelTab() == BottomPanelLayoutTypes.BottomPanelTab.CREATIVE
+                ? this.creativeCategory
+                : this.controller.getStorageCategory();
+    }
+
+    private List<RtsCreativeItemCatalog.CreativeEntry> creativeEntriesForCurrentFilter() {
+        return RtsCreativeItemCatalog.get().entries(this.creativeCategory, this.creativeSearch);
+    }
+
+    private int creativePageCount(int width, int height) {
+        int cols = Math.max(1, width / SLOT);
+        int rows = Math.max(1, height / SLOT);
+        int maxSlots = Math.max(1, cols * rows);
+        return Math.max(1, (int) Math.ceil(creativeEntriesForCurrentFilter().size() / (double) maxSlots));
+    }
+
+    private int creativeGridWidth(int mainStorageW) {
+        return Math.max(SLOT, (mainStorageW - STORAGE_RECENT_GAP) / 2);
+    }
+
+    public RtsCreativeItemCatalog.CreativeEntry getCreativeEntryForTooltip(int index) {
+        List<RtsCreativeItemCatalog.CreativeEntry> entries = creativeEntriesForCurrentFilter();
+        return index >= 0 && index < entries.size() ? entries.get(index) : null;
+    }
+
     private void toggleCategoryExpansion(String modNamespace) {
         if (modNamespace == null || modNamespace.isBlank()) {
             return;
@@ -1457,10 +1752,14 @@ public final class BottomPanel {
     }
 
     private static String formatModLabel(String modNamespace) {
-        if ("minecraft".equals(modNamespace)) {
-            return "Vanilla";
+        try {
+            return ModList.get().getModContainerById(modNamespace)
+                    .map(container -> container.getModInfo().getDisplayName())
+                    .filter(label -> label != null && !label.isBlank())
+                    .orElseGet(() -> humanizeToken(modNamespace));
+        } catch (RuntimeException | LinkageError ignored) {
+            return humanizeToken(modNamespace);
         }
-        return humanizeToken(modNamespace);
     }
 
     private static String formatTabLabel(String tabKey) {
@@ -1495,6 +1794,19 @@ public final class BottomPanel {
     }
 
     // ── 点击坐标解析 ──
+
+    private int resolveClickedCreativeEntry(double mouseX, double mouseY, int x, int y, int width, int height) {
+        int cols = Math.max(1, width / SLOT);
+        int rows = Math.max(1, height / SLOT);
+        int maxSlots = cols * rows;
+        if (!inside(mouseX, mouseY, x, y, cols * SLOT, rows * SLOT)) {
+            return -1;
+        }
+        int col = (int) ((mouseX - x) / SLOT);
+        int row = (int) ((mouseY - y) / SLOT);
+        int index = this.creativePage * maxSlots + row * cols + col;
+        return index < creativeEntriesForCurrentFilter().size() ? index : -1;
+    }
 
     private int resolveClickedEntry(double mouseX, double mouseY, int x, int y, int width, int height) {
         int cols = Math.max(1, width / SLOT);

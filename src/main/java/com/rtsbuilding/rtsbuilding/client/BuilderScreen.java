@@ -443,7 +443,9 @@ public final class BuilderScreen extends Screen {
             if (this.gearMenuPanel.isOpen()) {
                 return this.gearMenuPanel.mouseClicked(mouseX, mouseY, button);
             }
-            if (this.bottomPanel.bottomPanelTab == BottomPanelLayoutTypes.BottomPanelTab.BLUEPRINTS
+            boolean insideBottomPanel = isInsideBottomPanel(mouseX, mouseY);
+            if (!insideBottomPanel
+                    && this.bottomPanel.bottomPanelTab == BottomPanelLayoutTypes.BottomPanelTab.BLUEPRINTS
                     && BlueprintPanel.mouseClickedPlacementHud(mouseX, mouseY, this.width, this.height, TOP_H + 8, this.bottomPanel.getBottomY(), this.controller)) {
                 return true;
             }
@@ -902,10 +904,11 @@ public final class BuilderScreen extends Screen {
         if (BlueprintPanel.keyPressedMaterialDialog(keyCode)) {
             return true;
         }
-        if (BlueprintPanel.isCaptureModeActive() && BlueprintPanel.keyPressed(keyCode, this.controller)) {
+        if (BlueprintPanel.isCaptureModeActive() && BlueprintPanel.keyPressed(keyCode, scanCode, this.controller)) {
             return true;
         }
-        if (this.bottomPanel.bottomPanelTab == BottomPanelLayoutTypes.BottomPanelTab.BLUEPRINTS && BlueprintPanel.keyPressed(keyCode, this.controller)) {
+        if (this.bottomPanel.bottomPanelTab == BottomPanelLayoutTypes.BottomPanelTab.BLUEPRINTS
+                && BlueprintPanel.keyPressed(keyCode, scanCode, this.controller)) {
             return true;
         }
         if (this.controller.isHomeSelectionMode()) {
@@ -993,7 +996,7 @@ public final class BuilderScreen extends Screen {
         if (isSearchFocused() && keyCode == GLFW.GLFW_KEY_ESCAPE) {
             if (this.searchBox != null && this.searchBox.isFocused()) {
                 this.searchBox.setValue("");
-                this.controller.setStorageSearch("");
+                this.bottomPanel.handleStorageSearchChanged("");
                 blurSearchFocus();
                 return true;
             }
@@ -1008,7 +1011,7 @@ public final class BuilderScreen extends Screen {
         }
         if (this.searchBox != null && this.searchBox.isFocused()) {
             if (this.searchBox.keyPressed(keyCode, scanCode, modifiers)) {
-                this.controller.setStorageSearch(this.searchBox.getValue());
+                this.bottomPanel.handleStorageSearchChanged(this.searchBox.getValue());
             }
             return true;
         }
@@ -1118,7 +1121,7 @@ public final class BuilderScreen extends Screen {
         }
         if (this.searchBox != null && this.searchBox.isFocused()) {
             if (this.searchBox.charTyped(codePoint, modifiers)) {
-                this.controller.setStorageSearch(this.searchBox.getValue());
+                this.bottomPanel.handleStorageSearchChanged(this.searchBox.getValue());
             }
             return true;
         }
@@ -1151,6 +1154,7 @@ public final class BuilderScreen extends Screen {
         this.bottomPanel.hoveredEntry = -1;
         this.bottomPanel.hoveredRecentEntry = -1;
         this.bottomPanel.hoveredFluidEntry = -1;
+        this.bottomPanel.hoveredCreativeEntry = -1;
         this.bottomPanel.hoveredCraftableEntry = -1;
         this.bottomPanel.hoveredToolSlot = -1;
         this.bottomPanel.hoveredEmptyHandSlot = false;
@@ -1187,6 +1191,13 @@ public final class BuilderScreen extends Screen {
                 || BlueprintPanel.isMaterialDialogOpen();
         boolean placementSelectionActive = this.controller.hasSelectedItem() || this.controller.hasSelectedFluid();
         if (!modalOpen) {
+            if (!placementSelectionActive
+                    && this.bottomPanel.hoveredCreativeEntry >= 0) {
+                var entry = this.bottomPanel.getCreativeEntryForTooltip(this.bottomPanel.hoveredCreativeEntry);
+                if (entry != null) {
+                    renderLeftDockedTooltip(guiGraphics, entry.stack());
+                }
+            }
             if (!placementSelectionActive
                     && this.bottomPanel.hoveredEntry >= 0
                     && this.bottomPanel.hoveredEntry < this.controller.getStorageEntries().size()) {
@@ -2055,15 +2066,8 @@ public final class BuilderScreen extends Screen {
             return BlueprintGhostPreview.EMPTY;
         }
         BlockPos anchor = BlueprintPanel.getPinnedAnchor();
-        if (anchor == null) {
-            if (!isWorldArea(this.lastMouseX, this.lastMouseY)) {
-                return BlueprintGhostPreview.EMPTY;
-            }
-            BlockHitResult hit = this.cursorPicker.pickBlueprintPlacementHit();
-            if (hit == null) {
-                return BlueprintGhostPreview.EMPTY;
-            }
-            anchor = this.cursorPicker.resolveBlueprintAnchor(hit);
+        if (anchor == null && isWorldArea(this.lastMouseX, this.lastMouseY)) {
+            anchor = this.cursorPicker.resolveBlueprintAnchor(this.cursorPicker.pickBlueprintPlacementHit());
         }
         if (anchor == null) {
             return BlueprintGhostPreview.EMPTY;
