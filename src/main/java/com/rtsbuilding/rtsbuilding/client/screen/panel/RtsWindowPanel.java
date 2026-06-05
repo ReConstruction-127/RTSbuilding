@@ -7,6 +7,7 @@ import com.rtsbuilding.rtsbuilding.client.widget.WindowButton;
 
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 
 import org.lwjgl.glfw.GLFW;
@@ -28,6 +29,8 @@ public abstract class RtsWindowPanel implements RtsPanel {
     private static final int SCREEN_MARGIN = 4;
     private static final int CLOSE_BUTTON_SIZE = 14;
     private static final int CLOSE_BUTTON_MARGIN = 4;
+    private static final ResourceLocation CLOSE_BUTTON_TEXTURE = ResourceLocation.tryParse(
+            "rtsbuilding:textures/gui/general/close_button.png");
 
     protected BuilderScreen screen;
     protected ClientRtsController controller;
@@ -100,7 +103,8 @@ public abstract class RtsWindowPanel implements RtsPanel {
         this.defaultWidth = Math.max(getMinWindowWidth(), getDefaultWidth());
         this.defaultHeight = Math.max(getMinWindowHeight(), getDefaultHeight());
         this.closeButton = new WindowButton(0, 0, CLOSE_BUTTON_SIZE, CLOSE_BUTTON_SIZE,
-                Component.literal("x"), button -> setOpen(false));
+                Component.empty(), CLOSE_BUTTON_TEXTURE, 0, 0, 450, 450, 450, 450, 450, 900,
+                button -> setOpen(false));
     }
 
     @Override

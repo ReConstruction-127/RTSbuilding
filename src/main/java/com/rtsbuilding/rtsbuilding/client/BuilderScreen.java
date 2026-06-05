@@ -25,7 +25,6 @@ import com.rtsbuilding.rtsbuilding.client.screen.ultimine.UltiminePanel;
 import com.rtsbuilding.rtsbuilding.common.BuilderMode;
 import com.rtsbuilding.rtsbuilding.common.RtsUltimineCollector;
 import com.rtsbuilding.rtsbuilding.compat.ae2.RtsAe2Compat;
-import com.rtsbuilding.rtsbuilding.network.progression.S2CRtsQuestDetectStatusPayload;
 import com.rtsbuilding.rtsbuilding.network.storage.RtsStorageSort;
 import com.rtsbuilding.rtsbuilding.progression.RtsProgressionNodes;
 import net.minecraft.client.gui.Font;
@@ -111,18 +110,16 @@ public final class BuilderScreen extends Screen {
     private final InteractionWheelPanel interactionWheelPanel = new InteractionWheelPanel();
     /** Client-only persisted UI preferences for this screen. */
     private final RtsScreenUiStateManager uiStateManager;
+    /** Lightweight overlay/popup renderer split out from the main screen. */
+    private final RtsScreenOverlayRenderer overlayRenderer;
     /** Front-to-back input routing for movable RTS windows. */
     private final RtsFloatingWindowLayer floatingWindowLayer;
     /** Whether the user is currently dragging the input sensitivity slider. */
     private boolean draggingInputSensitivity = false;
-    /** Timestamp (System.currentTimeMillis) when the last damage flash was triggered, or -1 if none. */
-    private long damageFlashStartMs = -1L;
     /** Whether the funnel hotkey (quick-activate funnel mode) is currently held down. */
     private boolean funnelHotkeyHeld = false;
     /** The builder mode that was active before the funnel hotkey was pressed, for restoration on release. */
     private BuilderMode modeBeforeFunnelHotkey = BuilderMode.INTERACT;
-    /** Tracks whether the native GLFW cursor has been hidden (e.g. for funnel cursor display). */
-    private boolean nativeCursorHidden = false;
     /** Whether we are currently inside a fixed-RTS-scale render pass (for UI scaling). */
     private boolean fixedRtsScaleRenderPass = false;
     /** Whether we are currently inside a fixed-RTS-scale input pass (for UI scaling). */
@@ -151,6 +148,7 @@ public final class BuilderScreen extends Screen {
         super(Component.literal("RTS Builder"));
         this.controller = controller;
         this.uiStateManager = new RtsScreenUiStateManager(this.controller, this.shapeController, this.quickBuildPanel, this.ultiminePanel);
+        this.overlayRenderer = new RtsScreenOverlayRenderer(this, this.controller, this.cursorPicker, this.bottomPanel);
         this.floatingWindowLayer = new RtsFloatingWindowLayer(this.ultiminePanel, this.quickBuildPanel);
         this.guidePanel.init(this, this.controller);
         this.gearMenuPanel.init(this, this.controller);
@@ -170,7 +168,7 @@ public final class BuilderScreen extends Screen {
     }
     /** Triggers a red flash overlay on the screen to indicate the player took damage while in RTS mode. */
     public void triggerDamageFlash() {
-        this.damageFlashStartMs = System.currentTimeMillis();
+        this.overlayRenderer.triggerDamageFlash();
     }
     /** Sets which funnel buffer entry is currently hovered, for tooltip rendering. */
     public void setHoveredFunnelBufferEntry(int index) {
@@ -309,14 +307,14 @@ public final class BuilderScreen extends Screen {
             RtsClientPacketGateway.sendToggleCamera(this.controller.isStartCameraAtPlayerHead());
         }
         this.bottomPanel.craftQuantityDialog.close();
-        updateNativeCursorVisibility(false);
+        this.overlayRenderer.updateNativeCursorVisibility(false);
     }
     @Override
     /* Called when the screen is fully removed from the display stack. Resets camera vertical input and cursor. */
     public void removed() {
         super.removed();
         this.cameraInput.resetCameraVerticalHeld();
-        updateNativeCursorVisibility(false);
+        this.overlayRenderer.updateNativeCursorVisibility(false);
     }
     @Override
     /*
@@ -1171,8 +1169,8 @@ public final class BuilderScreen extends Screen {
         this.bottomPanel.hoveredPinPageButton = false;
         guiGraphics.fill(0, 0, this.width, TOP_H, 0xC0101116);
         if (this.controller.isHomeSelectionMode()) {
-            renderHomeSelectionOverlay(guiGraphics, mouseX, mouseY);
-            renderDamageFlash(guiGraphics);
+            this.overlayRenderer.renderHomeSelectionOverlay(guiGraphics, mouseX, mouseY);
+            this.overlayRenderer.renderDamageFlash(guiGraphics);
             return;
         }
         this.topBarPanel.render(guiGraphics, mouseX, mouseY);
@@ -1180,8 +1178,8 @@ public final class BuilderScreen extends Screen {
         this.quickBuildPanel.render(guiGraphics, mouseX, mouseY);
         this.ultiminePanel.render(guiGraphics, mouseX, mouseY);
         this.funnelBufferPanel.render(guiGraphics, mouseX, mouseY);
-        renderQuestDetectPopup(guiGraphics);
-        renderStorageScanPopup(guiGraphics);
+        this.overlayRenderer.renderQuestDetectPopup(guiGraphics);
+        this.overlayRenderer.renderStorageScanPopup(guiGraphics);
         if (this.bottomPanel.bottomPanelTab == BottomPanelLayoutTypes.BottomPanelTab.BLUEPRINTS && BlueprintPanel.isCaptureModeActive()) {
             BlockHitResult hit = isWorldArea(mouseX, mouseY) ? this.cursorPicker.pickBlockHit() : null;
             BlueprintPanel.updateCaptureHoverPoint(hit == null ? null : hit.getBlockPos());
@@ -1267,7 +1265,7 @@ public final class BuilderScreen extends Screen {
             }
             renderDiscoverabilityTooltips(guiGraphics, mouseX, mouseY);
             boolean funnelCursor = shouldRenderFunnelCursor();
-            updateNativeCursorVisibility(funnelCursor);
+            this.overlayRenderer.updateNativeCursorVisibility(funnelCursor);
             if (funnelCursor) {
                 guiGraphics.renderItem(FUNNEL_CURSOR_STACK, mouseX + 8, mouseY + 8);
             } else if (this.pendingGuiBindSlot >= 0) {
@@ -1279,7 +1277,7 @@ public final class BuilderScreen extends Screen {
                 }
             }
         } else {
-            updateNativeCursorVisibility(false);
+            this.overlayRenderer.updateNativeCursorVisibility(false);
         }
         this.bottomPanel.renderCraftFeedback(guiGraphics);
         if (this.interactionWheelPanel.isOpen()) {
@@ -1304,24 +1302,7 @@ public final class BuilderScreen extends Screen {
             renderAtGuiLayer(guiGraphics, RTS_MODAL_LAYER_Z + 60.0F,
                     () -> this.bottomPanel.craftQuantityDialog.render(guiGraphics, this.font, this.width, this.height, mouseX, mouseY));
         }
-        renderDamageFlash(guiGraphics);
-    }
-    /**
-     * Renders a red flash overlay over the entire screen that fades out over time,
-     * indicating the player took damage while the RTS screen was open.
-     */
-    private void renderDamageFlash(GuiGraphics guiGraphics) {
-        if (this.damageFlashStartMs < 0L) {
-            return;
-        }
-        long elapsed = System.currentTimeMillis() - this.damageFlashStartMs;
-        if (elapsed >= DAMAGE_FLASH_DURATION_MS) {
-            this.damageFlashStartMs = -1L;
-            return;
-        }
-        float alpha = 1.0F - (float) elapsed / (float) DAMAGE_FLASH_DURATION_MS;
-        int argb = ((int) (alpha * 128.0F) << 24) | 0x00FF0000;
-        guiGraphics.fill(0, 0, this.width, this.height, argb);
+        this.overlayRenderer.renderDamageFlash(guiGraphics);
     }
     /**
      * Renders a sub-component at an elevated Z-layer to ensure it appears above other
@@ -1398,33 +1379,6 @@ public final class BuilderScreen extends Screen {
         });
     }
     /**
-     * Renders the home-selection overlay, allowing the player to pick a block position
-     * in the world to set as the RTS camera home / spawn point.
-     */
-    private void renderHomeSelectionOverlay(GuiGraphics g, int mouseX, int mouseY) {
-        updateNativeCursorVisibility(false);
-        int panelW = Math.min(360, this.width - 24);
-        int panelX = (this.width - panelW) / 2;
-        int panelY = 12;
-        Component cooldown = Component.translatable("screen.rtsbuilding.home_select.cooldown");
-        var cooldownLines = this.font.split(cooldown, panelW - 20);
-        int panelH = 58 + Math.max(1, cooldownLines.size()) * 10;
-        RtsClientUiUtil.drawPanelFrame(g, panelX, panelY, panelW, panelH, 0xCC101820, 0xFF6E8799, 0xFF0D1218);
-        g.drawCenteredString(this.font, Component.translatable("screen.rtsbuilding.home_select.title"), panelX + panelW / 2, panelY + 8, 0xFFFFFF);
-        g.drawCenteredString(this.font, Component.translatable("screen.rtsbuilding.home_select.area"), panelX + panelW / 2, panelY + 22, 0xD8E6F5);
-        g.drawCenteredString(this.font, Component.translatable("screen.rtsbuilding.home_select.confirm"), panelX + panelW / 2, panelY + 34, 0xBFD2E6);
-        int cooldownY = panelY + 46;
-        for (var line : cooldownLines) {
-            g.drawString(this.font, line, panelX + (panelW - this.font.width(line)) / 2, cooldownY, 0xFFE7C46A);
-            cooldownY += 10;
-        }
-        BlockHitResult hit = isWorldArea(mouseX, mouseY) ? this.cursorPicker.pickBlockHit() : null;
-        if (hit != null) {
-            BlockPos pos = hit.getBlockPos();
-            g.drawCenteredString(this.font, Component.translatable("screen.rtsbuilding.home_select.target", pos.getX(), pos.getY(), pos.getZ()), this.width / 2, panelY + panelH + 14, 0xFFE7C46A);
-        }
-    }
-    /**
      * Renders a hint message at the top of the screen related to the guide panel when
      * the top bar buttons are visible.
      */
@@ -1440,110 +1394,6 @@ public final class BuilderScreen extends Screen {
         int y = mouseY + 8;
         RtsClientUiUtil.drawPanelFrame(g, x, y, CRAFT_DOCK_SLOT_SIZE, CRAFT_DOCK_SLOT_SIZE, 0xCC2D6B47, 0xFF78B28C, 0xFF0F151C);
         g.drawCenteredString(this.font, "+", x + CRAFT_DOCK_SLOT_SIZE / 2, y + 1, 0xFFFFFF);
-    }
-    /**
-     * Renders the quest detection popup, showing scan progress and results
-     * (detecting quest items across linked storage).
-     */
-    private void renderQuestDetectPopup(GuiGraphics g) {
-        if (!this.controller.isQuestDetectPopupVisible()) {
-            return;
-        }
-        int x = Mth.clamp((this.width - QUEST_DETECT_POPUP_W) / 2, 8, Math.max(8, this.width - QUEST_DETECT_POPUP_W - 8));
-        int y = TOP_H + 8;
-        RtsClientUiUtil.drawPanelFrame(g, x, y, QUEST_DETECT_POPUP_W, QUEST_DETECT_POPUP_H, 0xEE151A22, 0xFF61758A, 0xFF0D1117);
-        g.drawString(this.font, Component.translatable("screen.rtsbuilding.quest_scan.title"), x + 9, y + 7, 0xF2F7FF, false);
-        byte phase = this.controller.getQuestDetectPhase();
-        String status = questDetectStatusText(phase).getString();
-        int statusColor = phase == S2CRtsQuestDetectStatusPayload.PHASE_ERROR
-                ? 0xFFFFB0B0
-                : phase == S2CRtsQuestDetectStatusPayload.PHASE_UNAVAILABLE
-                        ? 0xFFE7C46A
-                        : 0xFFCFE3F7;
-        g.drawString(this.font, trimToWidth(status, QUEST_DETECT_POPUP_W - 18), x + 9, y + 19, statusColor, false);
-        int barX = x + 9;
-        int barY = y + 34;
-        int barW = QUEST_DETECT_POPUP_W - 18;
-        int barH = 6;
-        float progress = this.controller.getQuestDetectProgress();
-        int fillW = Math.max(0, Math.min(barW, Math.round(barW * progress)));
-        int progressColor = phase == S2CRtsQuestDetectStatusPayload.PHASE_ERROR
-                ? 0xFFE07070
-                : phase == S2CRtsQuestDetectStatusPayload.PHASE_COMPLETE
-                        ? 0xFF78B28C
-                        : 0xFF88BEF4;
-        g.fill(barX, barY, barX + barW, barY + barH, 0xAA202832);
-        if (fillW > 0) {
-            g.fill(barX, barY, barX + fillW, barY + barH, progressColor);
-        }
-        g.hLine(barX, barX + barW, barY, 0xFF405064);
-        g.hLine(barX, barX + barW, barY + barH, 0xFF0A0D12);
-        g.vLine(barX, barY, barY + barH, 0xFF405064);
-        g.vLine(barX + barW, barY, barY + barH, 0xFF0A0D12);
-    }
-    /**
-     * Builds the status text component for the quest detection popup based on the
-     * current detection phase (started, complete, unavailable, error, or ready).
-     */
-    private Component questDetectStatusText(byte phase) {
-        int scanned = this.controller.getQuestDetectScannedTasks();
-        int total = Math.max(scanned, this.controller.getQuestDetectTotalTasks());
-        int completed = this.controller.getQuestDetectCompletedTasks();
-        if (phase == S2CRtsQuestDetectStatusPayload.PHASE_STARTED) {
-            return Component.translatable("screen.rtsbuilding.quest_scan.scanning");
-        }
-        if (phase == S2CRtsQuestDetectStatusPayload.PHASE_COMPLETE) {
-            if (completed > 0) {
-                return completed == 1
-                        ? Component.translatable("screen.rtsbuilding.quest_scan.completed_one")
-                        : Component.translatable("screen.rtsbuilding.quest_scan.completed_many", completed);
-            }
-            return total > 0
-                    ? Component.translatable("screen.rtsbuilding.quest_scan.none_completed")
-                    : Component.translatable("screen.rtsbuilding.quest_scan.no_item_tasks");
-        }
-        if (phase == S2CRtsQuestDetectStatusPayload.PHASE_UNAVAILABLE) {
-            return Component.translatable("screen.rtsbuilding.quest_scan.unavailable");
-        }
-        if (phase == S2CRtsQuestDetectStatusPayload.PHASE_ERROR) {
-            return Component.translatable("screen.rtsbuilding.quest_scan.failed");
-        }
-        return Component.translatable("screen.rtsbuilding.quest_scan.ready");
-    }
-    /**
-     * Renders the storage scan popup, showing a progress bar for the ongoing or
-     * completed storage rescan operation.
-     */
-    private void renderStorageScanPopup(GuiGraphics g) {
-        if (!this.controller.isStorageScanPopupVisible()) {
-            return;
-        }
-        BottomPanelLayoutTypes.BottomPanelLayout layout = this.bottomPanel.resolveBottomPanelLayout();
-        int popupW = Math.min(STORAGE_SCAN_POPUP_W, Math.max(96, this.width - 16));
-        int x = Mth.clamp(
-                layout.panelX() + (layout.panelW() - popupW) / 2,
-                8,
-                Math.max(8, this.width - popupW - 8));
-        int y = Math.max(TOP_H + 8, layout.panelY() - STORAGE_SCAN_POPUP_H - 6);
-        RtsClientUiUtil.drawPanelFrame(g, x, y, popupW, STORAGE_SCAN_POPUP_H, 0xEE151A22, 0xFF61758A, 0xFF0D1117);
-        Component label = Component.translatable(this.controller.isStorageScanRunning()
-                ? "screen.rtsbuilding.storage_scan.scanning"
-                : "screen.rtsbuilding.storage_scan.ready");
-        g.drawString(this.font, trimToWidth(label.getString(), popupW - 18), x + 9, y + 6, 0xF2F7FF, false);
-        int barX = x + 9;
-        int barY = y + 20;
-        int barW = popupW - 18;
-        int barH = 5;
-        int fillW = Math.max(0, Math.min(barW, Math.round(barW * this.controller.getStorageScanProgress())));
-        g.fill(barX, barY, barX + barW, barY + barH, 0xAA202832);
-        if (fillW > 0) {
-            g.fill(barX, barY, barX + fillW, barY + barH,
-                    this.controller.isStorageScanRunning() ? 0xFF88BEF4 : 0xFF78B28C);
-        }
-        g.hLine(barX, barX + barW, barY, 0xFF405064);
-        g.hLine(barX, barX + barW, barY + barH, 0xFF0A0D12);
-        g.vLine(barX, barY, barY + barH, 0xFF405064);
-        g.vLine(barX + barW, barY, barY + barH, 0xFF0A0D12);
     }
     /**
      * Checks whether the given progression node has been unlocked by the player.
@@ -2268,22 +2118,6 @@ public final class BuilderScreen extends Screen {
                 && !isSearchFocused()
                 && !this.guidePanel.isOpen()
                 && !this.interactionWheelPanel.isOpen();
-    }
-    /**
-     * Toggles the native GLFW cursor visibility. Hides the OS cursor when the RTS
-     * funnel cursor (custom texture) is being rendered, and restores it otherwise.
-     */
-    private void updateNativeCursorVisibility(boolean hide) {
-        if (this.minecraft == null) {
-            this.nativeCursorHidden = false;
-            return;
-        }
-        long window = this.minecraft.getWindow().getWindow();
-        if (hide == this.nativeCursorHidden) {
-            return;
-        }
-        GLFW.glfwSetInputMode(window, GLFW.GLFW_CURSOR, hide ? GLFW.GLFW_CURSOR_HIDDEN : GLFW.GLFW_CURSOR_NORMAL);
-        this.nativeCursorHidden = hide;
     }
     /** Delegates to the cursor picker to compute the ray direction from the current cursor position. */
     public Vec3 computeCursorRayDirection() {
