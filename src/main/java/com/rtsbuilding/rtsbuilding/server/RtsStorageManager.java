@@ -1039,7 +1039,7 @@ public final class RtsStorageManager {
             saveSessionToPlayerNbt(player, session);
         }
 
-        requestPage(player, session.page, session.search, session.category, session.sort, session.ascending);
+        RtsStorageMining.scheduleMiningStorageRefresh(player, session);
         if (!droppedEntities.isEmpty()) {
             runQuestDetect(player, session, false);
         }

@@ -320,7 +320,7 @@ public final class BottomPanel {
                 || this.controller.isEmptyHandSelected()
                 || selectedToolSlot >= TOOL_HOTBAR_ITEM_SLOTS) ? -1 : selectedToolSlot;
 
-        for (int i = 0; i < 9; i++) {
+        for (int i = 0; i <= EMPTY_HAND_BUTTON_INDEX; i++) {
             int cx = hotbarX + i * HOTBAR_PITCH;
             int cy = rowY;
             boolean emptyHandButton = i == EMPTY_HAND_BUTTON_INDEX;
@@ -1260,7 +1260,7 @@ public final class BottomPanel {
         int hotbarW = getHotbarSlotsWidth();
         if (inside(mouseX, mouseY, hotbarX, rowY, hotbarW, HOTBAR_SLOT)) {
             int index = (int) ((mouseX - hotbarX) / HOTBAR_PITCH);
-            if (index >= 0 && index < 9) {
+            if (index >= 0 && index <= EMPTY_HAND_BUTTON_INDEX) {
                 int slotX = hotbarX + index * HOTBAR_PITCH;
                 if (mouseX <= slotX + HOTBAR_SLOT) {
                     if (index == EMPTY_HAND_BUTTON_INDEX) {
@@ -1332,7 +1332,7 @@ public final class BottomPanel {
         int hotbarW = getHotbarSlotsWidth();
         if (inside(mouseX, mouseY, hotbarX, rowY, hotbarW, HOTBAR_SLOT)) {
             int index = (int) ((mouseX - hotbarX) / HOTBAR_PITCH);
-            if (index >= 0 && index < 9) {
+            if (index >= 0 && index <= EMPTY_HAND_BUTTON_INDEX) {
                 int slotX = hotbarX + index * HOTBAR_PITCH;
                 if (mouseX <= slotX + HOTBAR_SLOT) {
                     if (index == EMPTY_HAND_BUTTON_INDEX) {
@@ -1926,7 +1926,8 @@ public final class BottomPanel {
     }
 
     private int getHotbarSlotsWidth() {
-        return HOTBAR_PITCH * 9 - (HOTBAR_PITCH - HOTBAR_SLOT);
+        int slots = TOOL_HOTBAR_ITEM_SLOTS + 1;
+        return HOTBAR_PITCH * slots - (HOTBAR_PITCH - HOTBAR_SLOT);
     }
 
     private int getFluidStripWidth(int storageWidth) {

@@ -405,7 +405,7 @@ final class RtsStorageMining {
         return session.miningPos == null && !session.ultimineTargets.isEmpty();
     }
 
-    private static void scheduleMiningStorageRefresh(ServerPlayer player, RtsStorageSession session) {
+    static void scheduleMiningStorageRefresh(ServerPlayer player, RtsStorageSession session) {
         if (player == null || session == null) {
             return;
         }
