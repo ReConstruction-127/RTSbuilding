@@ -11,7 +11,6 @@ import com.rtsbuilding.rtsbuilding.progression.RtsProgressionNodes;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.util.Mth;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.List;
@@ -94,9 +93,9 @@ public final class QuickBuildPanel extends RtsWindowPanel {
     }
 
     @Override
-    protected boolean handleContentClick(double mouseX, double mouseY, int button) {
+    protected void handleContentClick(double mouseX, double mouseY, int button) {
         if (button != GLFW.GLFW_MOUSE_BUTTON_LEFT) {
-            return true;
+            return;
         }
         int x = this.windowX;
         int bodyY = contentY();
@@ -110,7 +109,7 @@ public final class QuickBuildPanel extends RtsWindowPanel {
                 screen.ensureFillModeForShape(SHAPES[i]);
                 screen.clearShapeBuildSession();
                 screen.persistUiState();
-                return true;
+                return;
             }
         }
 
@@ -121,20 +120,18 @@ public final class QuickBuildPanel extends RtsWindowPanel {
             if (inside(mouseX, mouseY, rightX, rowY, 84, 16)) {
                 screen.setShapeFillMode(modes.get(i));
                 screen.persistUiState();
-                return true;
+                return;
             }
         }
 
         int rotY = bodyY + 100;
         if (inside(mouseX, mouseY, rightX, rotY + 10, 20, 18)) {
             screen.rotateShapeByStep(-1);
-            return true;
+            return;
         }
         if (inside(mouseX, mouseY, rightX + 84, rotY + 10, 20, 18)) {
             screen.rotateShapeByStep(1);
-            return true;
         }
-        return true;
     }
 
     @Override
