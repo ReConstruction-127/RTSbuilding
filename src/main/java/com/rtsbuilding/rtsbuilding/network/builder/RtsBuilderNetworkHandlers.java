@@ -199,7 +199,8 @@ public final class RtsBuilderNetworkHandlers {
                         payload.toolSlot(),
                         payload.toolItemId(),
                         payload.toolPrototype(),
-                        payload.limit());
+                        payload.limit(),
+                        payload.mode());
             }
         });
     }

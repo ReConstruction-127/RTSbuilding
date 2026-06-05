@@ -1,7 +1,9 @@
-package com.rtsbuilding.rtsbuilding.server;
+package com.rtsbuilding.rtsbuilding.server.storage;
 
 import com.rtsbuilding.rtsbuilding.network.storage.RtsStorageSort;
 import java.util.Arrays;
+
+import com.rtsbuilding.rtsbuilding.server.RtsStorageManager;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -28,8 +30,8 @@ import net.minecraft.world.level.Level;
  * saves used {@code linked_positions} plus one {@code linked_dimension}. Both
  * must keep loading until a deliberate save-format migration says otherwise.
  */
-final class RtsStorageSessionCodec {
-    static final String ROOT_KEY = "rtsbuilding_storage_session";
+public final class RtsStorageSessionCodec {
+    public static final String ROOT_KEY = "rtsbuilding_storage_session";
 
     private static final String NBT_LINKED_ENTRIES = "linked_entries";
     private static final String NBT_LINKED_ENTRY_POS = "pos";
@@ -70,7 +72,7 @@ final class RtsStorageSessionCodec {
     private RtsStorageSessionCodec() {
     }
 
-    static void load(ServerPlayer player, RtsStorageSession session, CompoundTag root) {
+    public static void load(ServerPlayer player, RtsStorageSession session, CompoundTag root) {
         session.linkedStorages.clear();
         session.linkedNames.clear();
         session.linkedModes.clear();
@@ -99,7 +101,7 @@ final class RtsStorageSessionCodec {
         loadGuiBindings(session, root);
     }
 
-    static CompoundTag serialize(RtsStorageSession session) {
+    public static CompoundTag serialize(RtsStorageSession session) {
         CompoundTag root = new CompoundTag();
 
         root.putInt(NBT_PAGE, Math.max(0, session.page));

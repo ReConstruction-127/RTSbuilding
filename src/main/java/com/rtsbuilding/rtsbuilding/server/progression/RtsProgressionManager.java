@@ -1,4 +1,4 @@
-package com.rtsbuilding.rtsbuilding.server;
+package com.rtsbuilding.rtsbuilding.server.progression;
 
 import com.rtsbuilding.rtsbuilding.Config;
 import com.rtsbuilding.rtsbuilding.compat.ftb.RtsFtbCompat;

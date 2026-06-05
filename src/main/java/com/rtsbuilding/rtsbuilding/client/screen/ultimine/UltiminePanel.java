@@ -11,7 +11,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
 import org.lwjgl.glfw.GLFW;
 
-import static com.rtsbuilding.rtsbuilding.client.screen.BuilderScreenConstants.*;
+import static com.rtsbuilding.rtsbuilding.client.screen.BuilderScreenConstants.TOP_H;
 
 /**
  * Movable Ultimine settings window.
@@ -22,11 +22,27 @@ import static com.rtsbuilding.rtsbuilding.client.screen.BuilderScreenConstants.*
  * paths so the window migration does not alter gameplay behavior.
  */
 public final class UltiminePanel extends RtsWindowPanel {
+    // ======================== 面板尺寸配置 ========================
+    /** 连锁挖掘面板宽度 */
+    private static final int ULTIMINE_PANEL_W = 178;
+    /** 连锁挖掘面板高度 */
+    private static final int ULTIMINE_PANEL_H = 156;
+    private static final int ULTIMINE_PANEL_MIN_H = 156;
+    /** 连锁挖掘最小限制 */
+    private static final int ULTIMINE_MIN_LIMIT = 1;
+    /** 连锁挖掘最大限制 */
+    private static final int ULTIMINE_MAX_LIMIT = 256;
+
     private int ultimineLimit = 64;
-    private boolean ultimineLimitEditing = false;
-    private boolean ultimineLimitSelectAll = false;
-    private String ultimineLimitDraft = "";
     private int lastUltimineSentLimit = 0;
+    /** Whether the user is currently dragging the slider knob. */
+    private boolean sliderDragging = false;
+    /** Whether the user is typing a limit value into the text input. */
+    private boolean limitInputFocused = false;
+    /** Text being typed in the limit input field. */
+    private final StringBuilder limitInputText = new StringBuilder();
+    /** Current ultimine mode: CHAIN (connected same-type) or AREA (volume break). */
+    private UltimineMode ultimineMode = UltimineMode.CHAIN;
 
     @Override
     public void init(BuilderScreen screen, ClientRtsController controller) {
@@ -36,9 +52,6 @@ public final class UltiminePanel extends RtsWindowPanel {
 
     public void applyOpenState(boolean open) {
         this.open = open;
-        if (!open) {
-            cancelUltimineLimitEdit();
-        }
     }
 
     public int getLimit() {
@@ -57,52 +70,111 @@ public final class UltiminePanel extends RtsWindowPanel {
         this.lastUltimineSentLimit = limit;
     }
 
-    public void adjustLimit(int delta) {
-        adjustUltimineLimit(delta);
+    public UltimineMode getMode() {
+        return this.ultimineMode;
     }
 
-    public void commitEdit() {
-        commitUltimineLimitEdit();
-    }
-
-    public boolean isLimitEditing() {
-        return this.ultimineLimitEditing;
+    public void setMode(UltimineMode mode) {
+        this.ultimineMode = mode;
     }
 
     @Override
     protected void renderContent(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         int x = this.windowX;
-        int rowY = contentY() + 12;
-        g.drawString(screen.font(), Component.translatable("screen.rtsbuilding.ultimine.blocks"), x + 8, rowY, 0xD8E3EE);
-        RtsClientUiUtil.drawPanelFrame(g, x + 8, rowY + 12, 24, 18, 0xAA1C232D, 0xFF647B92, 0xFF0D1117);
-        g.drawCenteredString(screen.font(), "-", x + 20, rowY + 17, 0xFFFFFF);
-        RtsClientUiUtil.drawPanelFrame(g, x + 38, rowY + 12, 58, 18, 0xAA243547, 0xFF647B92, 0xFF0D1117);
-        if (this.ultimineLimitEditing) {
-            g.fill(x + 40, rowY + 14, x + 94, rowY + 28, 0x552D82C8);
-        }
-        String limitText = this.ultimineLimitEditing ? this.ultimineLimitDraft : Integer.toString(this.ultimineLimit);
-        if (limitText.isEmpty()) {
-            limitText = "_";
-        }
-        g.drawCenteredString(screen.font(), limitText, x + 67, rowY + 17, this.ultimineLimitEditing ? 0xFFFFFF : 0xF2F7FF);
-        RtsClientUiUtil.drawPanelFrame(g, x + 102, rowY + 12, 24, 18, 0xAA1C232D, 0xFF647B92, 0xFF0D1117);
-        g.drawCenteredString(screen.font(), "+", x + 114, rowY + 17, 0xFFFFFF);
-        RtsClientUiUtil.drawPanelFrame(g, x + 132, rowY + 12, 42, 18, 0xAA1C232D, 0xFF647B92, 0xFF0D1117);
-        g.drawCenteredString(screen.font(), "MIN", x + 153, rowY + 17, 0xFFFFFF);
-        RtsClientUiUtil.drawPanelFrame(g, x + 180, rowY + 12, 48, 18, 0xAA1C232D, 0xFF647B92, 0xFF0D1117);
-        g.drawCenteredString(screen.font(), "MAX", x + 204, rowY + 17, 0xFFFFFF);
+        int range = ULTIMINE_MAX_LIMIT - ULTIMINE_MIN_LIMIT;
+        double fraction = (this.ultimineLimit - ULTIMINE_MIN_LIMIT) / (double) range;
 
-        int stage = this.controller.getMineProgressStage();
-        int progressY = contentY() + 62;
-        String progressLabel = stage >= 0
-                ? screen.text("screen.rtsbuilding.ultimine.breaking", Math.max(1, this.lastUltimineSentLimit))
-                : screen.text("screen.rtsbuilding.ultimine.ready");
-        g.drawString(screen.font(), progressLabel, x + 8, progressY - 12, stage >= 0 ? 0xB8FFB8 : 0xAFC0D3);
+        // ---- 进度条区域 ----
+        // 只显示范围破坏（Ultimine）进度，不混用单方块挖掘进度
+        int progressY = contentY() + 34;
+        int processed = this.controller.getUltimineProgressProcessed();
+        int total = this.controller.getUltimineProgressTotal();
+        boolean ultimineActive = processed >= 0 && total > 0;
+
+        String progressLabel;
+        double progressFraction;
+        int labelColor;
+
+        if (ultimineActive) {
+            progressLabel = screen.text("screen.rtsbuilding.ultimine.breaking_progress", processed, total);
+            progressFraction = Math.min(1.0D, processed / (double) total);
+            labelColor = 0xB8FFB8;
+        } else {
+            progressLabel = screen.text("screen.rtsbuilding.ultimine.ready");
+            progressFraction = 0.0D;
+            labelColor = 0xAFC0D3;
+        }
+
+        g.drawString(screen.font(), progressLabel, x + 8, progressY - 12, labelColor);
         RtsClientUiUtil.drawPanelFrame(g, x + 8, progressY, ULTIMINE_PANEL_W - 16, 12, 0xAA101820, 0xFF647B92, 0xFF0D1117);
-        int fillW = stage < 0 ? 0 : Math.min(ULTIMINE_PANEL_W - 20, Math.max(1, (int) (((stage + 1) / 10.0F) * (ULTIMINE_PANEL_W - 20))));
-        if (fillW > 0) {
+        if (progressFraction > 0.0D) {
+            int fillW = Math.min(ULTIMINE_PANEL_W - 20, Math.max(1, (int) (progressFraction * (ULTIMINE_PANEL_W - 20))));
             g.fill(x + 10, progressY + 2, x + 10 + fillW, progressY + 10, 0xFF78B28C);
         }
+
+        // ---- 数值输入框 ----
+        int inputX = x + (ULTIMINE_PANEL_W - 50) / 2;
+        int inputY = contentY() + 52;
+        int inputW = 50;
+        int inputH = 12;
+        g.fill(inputX, inputY, inputX + inputW, inputY + inputH, 0xFF0D1117);
+        g.fill(inputX + 1, inputY + 1, inputX + inputW - 1, inputY + inputH - 1, 0xFF1A2330);
+
+        String displayText = limitInputFocused
+                ? limitInputText.toString()
+                : Integer.toString(this.ultimineLimit);
+        boolean showCursor = limitInputFocused && (System.currentTimeMillis() / 500 % 2 == 0);
+        String cursorStr = showCursor ? "|" : "";
+        int textX = inputX + (inputW - screen.font().width(displayText + cursorStr)) / 2;
+        int textY = inputY + (inputH - screen.font().lineHeight) / 2;
+        g.drawString(screen.font(), displayText + cursorStr, textX, textY, 0xF2F7FF);
+
+        // ---- 滑块 + 标签 ----
+        int trackX = x + 8;
+        int trackY = contentY() + 72;
+        int trackW = ULTIMINE_PANEL_W - 16;
+        int knobX = trackX + (int) Math.round(fraction * trackW);
+
+        // 轨道背景
+        g.fill(trackX, trackY, trackX + trackW, trackY + 4, 0xFF07090D);
+        g.fill(trackX + 1, trackY + 1, trackX + trackW - 1, trackY + 3, 0xFF313946);
+        // 已填充部分
+        g.fill(trackX + 1, trackY + 1, knobX, trackY + 3, 0xFF5FE36C);
+        // 滑块 (knob)
+        boolean hoverSlider = !this.sliderDragging && mouseY >= trackY - 6 && mouseY <= trackY + 10
+                && mouseX >= knobX - 4 && mouseX <= knobX + 5;
+        int knobColor = this.sliderDragging ? 0xFF8AFF8A : (hoverSlider ? 0xFF6AFF7A : 0xFF5FE36C);
+        g.fill(knobX - 3, trackY - 5, knobX + 4, trackY + 8, knobColor);
+
+        // 最小/最大值标签
+        g.drawString(screen.font(), Integer.toString(ULTIMINE_MIN_LIMIT), trackX, trackY + 10, 0xB5C1CE);
+        g.drawString(screen.font(), Integer.toString(ULTIMINE_MAX_LIMIT), trackX + trackW - 20, trackY + 10, 0xB5C1CE);
+
+        // ---- 模式切换 ----
+        int modeBtnY = contentY() + 92;
+        int modeBtnW = (ULTIMINE_PANEL_W - 20) / 2;
+        int chainBtnX = x + 8;
+        int areaBtnX = chainBtnX + modeBtnW + 4;
+
+        boolean chainActive = this.ultimineMode == UltimineMode.CHAIN;
+        boolean hoverChain = mouseY >= modeBtnY && mouseY <= modeBtnY + 14
+                && mouseX >= chainBtnX && mouseX <= chainBtnX + modeBtnW;
+        boolean hoverArea = mouseY >= modeBtnY && mouseY <= modeBtnY + 14
+                && mouseX >= areaBtnX && mouseX <= areaBtnX + modeBtnW;
+
+        int chainBg = chainActive ? 0xFF5FE36C : (hoverChain ? 0xFF2A3A4A : 0xFF1A2330);
+        int chainBorder = chainActive ? 0xFF5FE36C : (hoverChain ? 0xFF647B92 : 0xFF313946);
+        g.fill(chainBtnX, modeBtnY, chainBtnX + modeBtnW, modeBtnY + 14, chainBorder);
+        g.fill(chainBtnX + 1, modeBtnY + 1, chainBtnX + modeBtnW - 1, modeBtnY + 13, chainBg);
+        int chainLabelX = chainBtnX + (modeBtnW - screen.font().width(screen.text("screen.rtsbuilding.ultimine.mode_chain"))) / 2;
+        g.drawString(screen.font(), screen.text("screen.rtsbuilding.ultimine.mode_chain"), chainLabelX, modeBtnY + 3, chainActive ? 0xFF0D1117 : 0xB5C1CE);
+
+        int areaBg = !chainActive ? 0xFF5FE36C : (hoverArea ? 0xFF2A3A4A : 0xFF1A2330);
+        int areaBorder = !chainActive ? 0xFF5FE36C : (hoverArea ? 0xFF647B92 : 0xFF313946);
+        g.fill(areaBtnX, modeBtnY, areaBtnX + modeBtnW, modeBtnY + 14, areaBorder);
+        g.fill(areaBtnX + 1, modeBtnY + 1, areaBtnX + modeBtnW - 1, modeBtnY + 13, areaBg);
+        int areaLabelX = areaBtnX + (modeBtnW - screen.font().width(screen.text("screen.rtsbuilding.ultimine.mode_area"))) / 2;
+        g.drawString(screen.font(), screen.text("screen.rtsbuilding.ultimine.mode_area"), areaLabelX, modeBtnY + 3, chainActive ? 0xB5C1CE : 0xFF0D1117);
     }
 
     @Override
@@ -110,85 +182,51 @@ public final class UltiminePanel extends RtsWindowPanel {
         if (button != GLFW.GLFW_MOUSE_BUTTON_LEFT) {
             return;
         }
-        int x = this.windowX;
-        int rowY = contentY() + 12;
-        if (inside(mouseX, mouseY, x + 8, rowY + 12, 24, 18)) {
-            adjustUltimineLimit(screen.hasShiftDown() ? -16 : -1);
+
+        // ---- 数值输入框点击 ----
+        int inputX = this.windowX + (ULTIMINE_PANEL_W - 50) / 2;
+        int inputY = contentY() + 52;
+        int inputW = 50;
+        int inputH = 12;
+        if (mouseX >= inputX && mouseX <= inputX + inputW && mouseY >= inputY && mouseY <= inputY + inputH) {
+            this.limitInputFocused = true;
+            this.limitInputText.setLength(0);
+            this.limitInputText.append(this.ultimineLimit);
             return;
         }
-        if (inside(mouseX, mouseY, x + 102, rowY + 12, 24, 18)) {
-            adjustUltimineLimit(screen.hasShiftDown() ? 16 : 1);
-            return;
+        if (this.limitInputFocused) {
+            commitLimitInput();
         }
-        if (inside(mouseX, mouseY, x + 38, rowY + 12, 58, 18)) {
-            beginUltimineLimitEdit();
-            return;
-        }
-        if (inside(mouseX, mouseY, x + 132, rowY + 12, 42, 18)) {
-            this.ultimineLimit = ULTIMINE_MIN_LIMIT;
-            cancelUltimineLimitEdit();
+        this.limitInputFocused = false;
+
+        // ---- 滑块点击 ----
+        int trackX = this.windowX + 8;
+        int trackY = contentY() + 72;
+        int trackW = ULTIMINE_PANEL_W - 16;
+        if (mouseY >= trackY - 6 && mouseY <= trackY + 10 && mouseX >= trackX && mouseX <= trackX + trackW) {
+            this.sliderDragging = true;
+            setLimitFromSliderX(mouseX);
             screen.persistUiState();
             return;
         }
-        if (inside(mouseX, mouseY, x + 180, rowY + 12, 48, 18)) {
-            this.ultimineLimit = ULTIMINE_MAX_LIMIT;
-            cancelUltimineLimitEdit();
-            screen.persistUiState();
-        }
-    }
 
-    public boolean isInsideLimitInput(double mouseX, double mouseY) {
-        if (!isOpen() || !screen.hasProgressionNode(RtsProgressionNodes.ULTIMINE) || !hasInitializedBounds()) {
-            return false;
-        }
-        int rowY = contentY() + 12;
-        return inside(mouseX, mouseY, this.windowX + 38, rowY + 12, 58, 18);
-    }
-
-    public boolean handleKeyPressed(int keyCode) {
-        if (!this.ultimineLimitEditing) {
-            return false;
-        }
-        if (keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER) {
-            commitUltimineLimitEdit();
-            return true;
-        }
-        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
-            cancelUltimineLimitEdit();
-            return true;
-        }
-        if (keyCode == GLFW.GLFW_KEY_BACKSPACE) {
-            if (this.ultimineLimitSelectAll) {
-                this.ultimineLimitDraft = "";
-                this.ultimineLimitSelectAll = false;
-            } else if (!this.ultimineLimitDraft.isEmpty()) {
-                this.ultimineLimitDraft = this.ultimineLimitDraft.substring(0, this.ultimineLimitDraft.length() - 1);
+        // ---- 模式切换点击 ----
+        int modeBtnY = contentY() + 92;
+        int modeBtnW = (ULTIMINE_PANEL_W - 20) / 2;
+        int chainBtnX = this.windowX + 8;
+        int areaBtnX = chainBtnX + modeBtnW + 4;
+        if (mouseY >= modeBtnY && mouseY <= modeBtnY + 14) {
+            if (mouseX >= chainBtnX && mouseX <= chainBtnX + modeBtnW && this.ultimineMode != UltimineMode.CHAIN) {
+                this.ultimineMode = UltimineMode.CHAIN;
+                screen.persistUiState();
+                return;
             }
-            return true;
+            if (mouseX >= areaBtnX && mouseX <= areaBtnX + modeBtnW && this.ultimineMode != UltimineMode.AREA) {
+                this.ultimineMode = UltimineMode.AREA;
+                screen.persistUiState();
+                return;
+            }
         }
-        if (keyCode == GLFW.GLFW_KEY_DELETE) {
-            this.ultimineLimitDraft = "";
-            this.ultimineLimitSelectAll = false;
-            return true;
-        }
-        return true;
-    }
-
-    public boolean handleCharTyped(char codePoint) {
-        if (!this.ultimineLimitEditing) {
-            return false;
-        }
-        if (!Character.isDigit(codePoint)) {
-            return true;
-        }
-        if (this.ultimineLimitSelectAll) {
-            this.ultimineLimitDraft = "";
-            this.ultimineLimitSelectAll = false;
-        }
-        if (this.ultimineLimitDraft.length() < 3) {
-            this.ultimineLimitDraft += codePoint;
-        }
-        return true;
     }
 
     @Override
@@ -213,7 +251,7 @@ public final class UltiminePanel extends RtsWindowPanel {
 
     @Override
     protected int getMinWindowHeight() {
-        return ULTIMINE_PANEL_H;
+        return ULTIMINE_PANEL_MIN_H;
     }
 
     @Override
@@ -235,7 +273,6 @@ public final class UltiminePanel extends RtsWindowPanel {
 
     @Override
     protected void onClose() {
-        cancelUltimineLimitEdit();
         screen.persistUiState();
     }
 
@@ -244,44 +281,88 @@ public final class UltiminePanel extends RtsWindowPanel {
         screen.persistUiState();
     }
 
-    private void adjustUltimineLimit(int delta) {
-        this.ultimineLimit = clampUltimineLimit(this.ultimineLimit + delta);
-        cancelUltimineLimitEdit();
-        screen.persistUiState();
-    }
-
-    private void beginUltimineLimitEdit() {
-        this.ultimineLimitDraft = Integer.toString(this.ultimineLimit);
-        this.ultimineLimitEditing = true;
-        this.ultimineLimitSelectAll = true;
-        screen.blurSearchFocus();
-    }
-
-    private void commitUltimineLimitEdit() {
-        if (!this.ultimineLimitEditing) {
-            return;
+    @Override
+    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+        if (button != GLFW.GLFW_MOUSE_BUTTON_LEFT) {
+            return false;
         }
-        try {
-            if (!this.ultimineLimitDraft.isBlank()) {
-                this.ultimineLimit = clampUltimineLimit(Integer.parseInt(this.ultimineLimitDraft));
+        if (this.sliderDragging) {
+            setLimitFromSliderX(mouseX);
+            return true;
+        }
+        return super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+    }
+
+    @Override
+    public boolean mouseReleased(double mouseX, double mouseY, int button) {
+        this.sliderDragging = false;
+        return super.mouseReleased(mouseX, mouseY, button);
+    }
+
+    // ======================== 键盘输入 ========================
+
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (!this.open) {
+            return false;
+        }
+        if (this.limitInputFocused) {
+            if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+                this.limitInputFocused = false;
+                this.limitInputText.setLength(0);
+                return true;
             }
-        } catch (NumberFormatException ignored) {
+            if (keyCode == GLFW.GLFW_KEY_ENTER) {
+                commitLimitInput();
+                return true;
+            }
+            if (keyCode == GLFW.GLFW_KEY_BACKSPACE) {
+                if (!this.limitInputText.isEmpty()) {
+                    this.limitInputText.setLength(this.limitInputText.length() - 1);
+                }
+                return true;
+            }
+            return true;
         }
-        cancelUltimineLimitEdit();
-        screen.persistUiState();
+        return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
-    private void cancelUltimineLimitEdit() {
-        this.ultimineLimitEditing = false;
-        this.ultimineLimitSelectAll = false;
-        this.ultimineLimitDraft = "";
+    @Override
+    protected boolean handleWindowCharTyped(char codePoint, int modifiers) {
+        if (!this.limitInputFocused) {
+            return false;
+        }
+        if (codePoint >= '0' && codePoint <= '9' && this.limitInputText.length() < 4) {
+            this.limitInputText.append(codePoint);
+            return true;
+        }
+        return false;
+    }
+
+    private void commitLimitInput() {
+        if (!this.limitInputText.isEmpty()) {
+            try {
+                int value = Integer.parseInt(this.limitInputText.toString());
+                setLimit(value);
+                screen.persistUiState();
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        this.limitInputFocused = false;
+        this.limitInputText.setLength(0);
+    }
+
+    private void setLimitFromSliderX(double mouseX) {
+        int trackX = this.windowX + 8;
+        int trackW = ULTIMINE_PANEL_W - 16;
+        double fraction = (mouseX - trackX) / (double) trackW;
+        fraction = Mth.clamp(fraction, 0.0, 1.0);
+        this.ultimineLimit = (int) Math.round(ULTIMINE_MIN_LIMIT + fraction * (ULTIMINE_MAX_LIMIT - ULTIMINE_MIN_LIMIT));
+        this.ultimineLimit = clampUltimineLimit(this.ultimineLimit);
     }
 
     private static int clampUltimineLimit(int value) {
         return Math.max(ULTIMINE_MIN_LIMIT, Math.min(ULTIMINE_MAX_LIMIT, value));
     }
 
-    private static boolean inside(double mouseX, double mouseY, int x, int y, int w, int h) {
-        return mouseX >= x && mouseX <= x + w && mouseY >= y && mouseY <= y + h;
-    }
 }

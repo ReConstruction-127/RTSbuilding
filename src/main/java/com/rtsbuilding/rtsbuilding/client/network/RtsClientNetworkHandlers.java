@@ -7,6 +7,7 @@ import com.rtsbuilding.rtsbuilding.network.feedback.S2CRtsDamageFeedbackPayload;
 import com.rtsbuilding.rtsbuilding.network.craft.S2CRtsCraftFeedbackPayload;
 import com.rtsbuilding.rtsbuilding.network.craft.S2CRtsCraftablesPayload;
 import com.rtsbuilding.rtsbuilding.network.builder.S2CRtsMineProgressPayload;
+import com.rtsbuilding.rtsbuilding.network.builder.S2CRtsUltimineProgressPayload;
 import com.rtsbuilding.rtsbuilding.network.progression.S2CRtsProgressionStatePayload;
 import com.rtsbuilding.rtsbuilding.network.progression.S2CRtsQuestDetectStatusPayload;
 import com.rtsbuilding.rtsbuilding.network.storage.S2CRtsRemoteMenuHintPayload;
@@ -48,6 +49,10 @@ public final class RtsClientNetworkHandlers {
 
     public static void handleMineProgress(S2CRtsMineProgressPayload payload, IPayloadContext context) {
         context.enqueueWork(() -> ClientRtsController.get().applyMineProgress(payload));
+    }
+
+    public static void handleUltimineProgress(S2CRtsUltimineProgressPayload payload, IPayloadContext context) {
+        context.enqueueWork(() -> ClientRtsController.get().applyUltimineProgress(payload));
     }
 
     public static void handleProgressionState(S2CRtsProgressionStatePayload payload, IPayloadContext context) {

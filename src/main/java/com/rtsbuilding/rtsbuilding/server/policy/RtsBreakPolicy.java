@@ -1,4 +1,4 @@
-package com.rtsbuilding.rtsbuilding.server;
+package com.rtsbuilding.rtsbuilding.server.policy;
 
 import com.rtsbuilding.rtsbuilding.server.data.PlacedBlockTrackerData;
 import com.rtsbuilding.rtsbuilding.server.loadout.RtsMiningRules;

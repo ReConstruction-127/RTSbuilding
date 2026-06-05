@@ -1,4 +1,4 @@
-package com.rtsbuilding.rtsbuilding.server;
+package com.rtsbuilding.rtsbuilding.server.tracking;
 
 import com.rtsbuilding.rtsbuilding.RtsbuildingMod;
 import com.rtsbuilding.rtsbuilding.server.data.PlacedBlockTrackerData;

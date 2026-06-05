@@ -1,9 +1,12 @@
-package com.rtsbuilding.rtsbuilding.server;
+package com.rtsbuilding.rtsbuilding.server.storage;
 
 import com.rtsbuilding.rtsbuilding.common.BuilderMode;
 import com.rtsbuilding.rtsbuilding.compat.ae2.RtsAe2Compat;
 import com.rtsbuilding.rtsbuilding.progression.RtsFeature;
 
+import com.rtsbuilding.rtsbuilding.server.RtsStorageManager;
+import com.rtsbuilding.rtsbuilding.server.camera.RtsCameraManager;
+import com.rtsbuilding.rtsbuilding.server.progression.RtsProgressionManager;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -38,7 +41,7 @@ import net.minecraft.world.phys.Vec3;
  * temporary interaction helpers because those are shared with placement and
  * direct interact flows.
  */
-final class RtsStorageBindings {
+public final class RtsStorageBindings {
     private RtsStorageBindings() {
     }
 
@@ -46,7 +49,7 @@ final class RtsStorageBindings {
      * Stores the requested builder mode and reports whether leaving funnel mode
      * requires the manager to flush the funnel buffer and refresh the page.
      */
-    static boolean setMode(RtsStorageSession session, BuilderMode mode) {
+    public static boolean setMode(RtsStorageSession session, BuilderMode mode) {
         if (session == null) {
             return false;
         }
@@ -59,7 +62,7 @@ final class RtsStorageBindings {
      * extract-only mode behavior. A target with no item or fluid endpoint still
      * asks the UI to return to page zero without saving session data.
      */
-    static UpdateResult linkStorage(ServerPlayer player, RtsStorageSession session, BlockPos pos, byte linkMode) {
+    public static UpdateResult linkStorage(ServerPlayer player, RtsStorageSession session, BlockPos pos, byte linkMode) {
         if (player == null || session == null || pos == null) {
             return UpdateResult.none();
         }
@@ -67,8 +70,8 @@ final class RtsStorageBindings {
         RtsLinkedStorageResolver.sanitizeSessionDimension(player, session);
 
         LinkedStorageRef ref = new LinkedStorageRef(player.serverLevel().dimension(), pos.immutable());
-        Object itemHandler = RtsLinkedStorageResolver.findLinkedItemHandler(player, pos);
-        Object fluidHandler = RtsLinkedStorageResolver.findFluidHandler(player, pos);
+        Object itemHandler = RtsLinkedCapabilities.findLinkedItemHandler(player, pos);
+        Object fluidHandler = RtsLinkedCapabilities.findFluidHandler(player, pos);
         if (itemHandler == null && fluidHandler == null) {
             return UpdateResult.refreshFirst(false);
         }
@@ -96,7 +99,7 @@ final class RtsStorageBindings {
      * Updates one fixed quick-slot cell. Blank/null item ids clear the slot;
      * nonblank ids must parse to a registered item before the session changes.
      */
-    static UpdateResult setQuickSlot(RtsStorageSession session, byte slotId, String itemId) {
+    public static UpdateResult setQuickSlot(RtsStorageSession session, byte slotId, String itemId) {
         if (session == null) {
             return UpdateResult.none();
         }
@@ -127,7 +130,7 @@ final class RtsStorageBindings {
      * remote-GUI feature gate; new bindings keep the previous block-label,
      * AE2 icon fallback, normal container, and block-entity target behavior.
      */
-    static UpdateResult setGuiBinding(ServerPlayer player, RtsStorageSession session, byte slotId, boolean clear,
+    public static UpdateResult setGuiBinding(ServerPlayer player, RtsStorageSession session, byte slotId, boolean clear,
             BlockPos pos, Direction face, String itemIdHint) {
         if (player == null || session == null) {
             return UpdateResult.none();
@@ -176,7 +179,7 @@ final class RtsStorageBindings {
      * dimension, access, direct block interaction, secondary-use retry, and
      * menu-provider fallback order must stay aligned with the old manager path.
      */
-    static UpdateResult openGuiBinding(ServerPlayer player, RtsStorageSession session, byte slotId, double remotePovBlockReach) {
+    public static UpdateResult openGuiBinding(ServerPlayer player, RtsStorageSession session, byte slotId, double remotePovBlockReach) {
         if (!RtsProgressionManager.canUse(player, RtsFeature.REMOTE_GUI_BINDING)) {
             return UpdateResult.none();
         }
@@ -242,22 +245,22 @@ final class RtsStorageBindings {
         return UpdateResult.refreshCurrent(session, false);
     }
 
-    static boolean isValidQuickSlotIndex(int slot) {
+    public static boolean isValidQuickSlotIndex(int slot) {
         return slot >= 0 && slot < RtsStorageManager.QUICK_SLOT_COUNT;
     }
 
-    static boolean isValidGuiBindingSlot(int slot) {
+    public static boolean isValidGuiBindingSlot(int slot) {
         return slot >= 0 && slot < RtsStorageManager.GUI_BINDING_SLOT_COUNT;
     }
 
-    static boolean canBindGuiTarget(ServerLevel level, BlockPos pos) {
+    public static boolean canBindGuiTarget(ServerLevel level, BlockPos pos) {
         if (resolveBindableMenuProvider(level, pos) != null) {
             return true;
         }
         return level != null && pos != null && level.hasChunkAt(pos) && level.getBlockEntity(pos) != null;
     }
 
-    static MenuProvider resolveBindableMenuProvider(ServerLevel level, BlockPos pos) {
+    public static MenuProvider resolveBindableMenuProvider(ServerLevel level, BlockPos pos) {
         if (level == null || pos == null || !level.hasChunkAt(pos)) {
             return null;
         }
@@ -268,7 +271,7 @@ final class RtsStorageBindings {
         return level.getBlockEntity(pos) instanceof MenuProvider menuProvider ? menuProvider : null;
     }
 
-    static String resolveGuiBindingIconItemId(ServerLevel level, BlockPos pos, Direction face, String itemIdHint, String label) {
+    public static String resolveGuiBindingIconItemId(ServerLevel level, BlockPos pos, Direction face, String itemIdHint, String label) {
         if (level == null || pos == null || !level.hasChunkAt(pos)) {
             return "";
         }
@@ -296,7 +299,7 @@ final class RtsStorageBindings {
      * Backfills older GUI bindings that predate item-id icons. Only empty icon
      * cells are changed, and the caller decides when to persist the session.
      */
-    static boolean refreshMissingGuiBindingIcons(ServerPlayer player, RtsStorageSession session) {
+    public static boolean refreshMissingGuiBindingIcons(ServerPlayer player, RtsStorageSession session) {
         if (player == null || session == null || player.server == null) {
             return false;
         }
@@ -381,7 +384,7 @@ final class RtsStorageBindings {
         return dz >= 0.0D ? Direction.SOUTH : Direction.NORTH;
     }
 
-    record UpdateResult(boolean saveSession, boolean refreshPage, int page) {
+    public record UpdateResult(boolean saveSession, boolean refreshPage, int page) {
         private static final UpdateResult NONE = new UpdateResult(false, false, 0);
 
         static UpdateResult none() {

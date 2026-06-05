@@ -1,9 +1,11 @@
-package com.rtsbuilding.rtsbuilding.server;
+package com.rtsbuilding.rtsbuilding.server.camera;
 
 import com.rtsbuilding.rtsbuilding.RtsbuildingMod;
 import com.rtsbuilding.rtsbuilding.entity.RtsCameraEntity;
 import com.rtsbuilding.rtsbuilding.network.camera.S2CRtsCameraStatePayload;
 import com.rtsbuilding.rtsbuilding.progression.RtsFeature;
+import com.rtsbuilding.rtsbuilding.server.progression.RtsProgressionManager;
+import com.rtsbuilding.rtsbuilding.server.RtsStorageManager;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;

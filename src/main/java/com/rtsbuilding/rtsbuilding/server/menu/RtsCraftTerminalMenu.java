@@ -1,5 +1,6 @@
-package com.rtsbuilding.rtsbuilding.server;
+package com.rtsbuilding.rtsbuilding.server.menu;
 
+import com.rtsbuilding.rtsbuilding.server.RtsStorageManager;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.Container;
 import net.minecraft.world.entity.player.Inventory;

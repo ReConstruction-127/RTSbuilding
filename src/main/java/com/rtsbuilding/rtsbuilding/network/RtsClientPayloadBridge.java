@@ -3,6 +3,7 @@ package com.rtsbuilding.rtsbuilding.network;
 
 import com.rtsbuilding.rtsbuilding.client.network.RtsClientNetworkHandlers;
 import com.rtsbuilding.rtsbuilding.network.builder.S2CRtsMineProgressPayload;
+import com.rtsbuilding.rtsbuilding.network.builder.S2CRtsUltimineProgressPayload;
 import com.rtsbuilding.rtsbuilding.network.camera.S2CRtsCameraStatePayload;
 import com.rtsbuilding.rtsbuilding.network.craft.S2CRtsCraftFeedbackPayload;
 import com.rtsbuilding.rtsbuilding.network.craft.S2CRtsCraftablesPayload;
@@ -73,6 +74,12 @@ public final class RtsClientPayloadBridge {
     public static void handleMineProgress(S2CRtsMineProgressPayload payload, IPayloadContext context) {
         if (FMLEnvironment.dist == Dist.CLIENT) {
             com.rtsbuilding.rtsbuilding.client.network.RtsClientNetworkHandlers.handleMineProgress(payload, context);
+        }
+    }
+
+    public static void handleUltimineProgress(S2CRtsUltimineProgressPayload payload, IPayloadContext context) {
+        if (FMLEnvironment.dist == Dist.CLIENT) {
+            com.rtsbuilding.rtsbuilding.client.network.RtsClientNetworkHandlers.handleUltimineProgress(payload, context);
         }
     }
 

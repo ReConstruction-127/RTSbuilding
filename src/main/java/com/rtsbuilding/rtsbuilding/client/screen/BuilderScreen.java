@@ -23,6 +23,7 @@ import com.rtsbuilding.rtsbuilding.client.screen.shape.ShapeDataRecords;
 import com.rtsbuilding.rtsbuilding.client.screen.shape.ShapeGeometryUtil;
 import com.rtsbuilding.rtsbuilding.client.screen.topbar.TopBarPanel;
 import com.rtsbuilding.rtsbuilding.client.screen.topbar.TopBarTypes;
+import com.rtsbuilding.rtsbuilding.client.screen.ultimine.UltimineMode;
 import com.rtsbuilding.rtsbuilding.client.screen.ultimine.UltiminePanel;
 import com.rtsbuilding.rtsbuilding.client.state.RtsClientUiStateStore;
 import com.rtsbuilding.rtsbuilding.client.state.RtsScreenUiStateManager;
@@ -426,11 +427,6 @@ public final class BuilderScreen extends Screen {
                     return true;
                 }
             }
-        }
-        if (button == GLFW.GLFW_MOUSE_BUTTON_LEFT
-                && this.ultiminePanel.isLimitEditing()
-                && !this.ultiminePanel.isInsideLimitInput(mouseX, mouseY)) {
-            this.ultiminePanel.commitEdit();
         }
         if (this.controller.isHomeSelectionMode()) {
             if (button == GLFW.GLFW_MOUSE_BUTTON_LEFT && isWorldArea(mouseX, mouseY)) {
@@ -938,9 +934,6 @@ public final class BuilderScreen extends Screen {
             }
             return true;
         }
-        if (this.ultiminePanel.isLimitEditing()) {
-            return this.ultiminePanel.handleKeyPressed(keyCode);
-        }
         if (this.interactionWheelPanel.keyPressed(keyCode)) {
             return true;
         }
@@ -949,6 +942,9 @@ public final class BuilderScreen extends Screen {
         }
         if (this.gearMenuPanel.isOpen()) {
             return this.gearMenuPanel.keyPressed(keyCode);
+        }
+        if (this.floatingWindowLayer.keyPressed(keyCode, scanCode, modifiers)) {
+            return true;
         }
         if (this.pendingGuiBindSlot >= 0 && keyCode == GLFW.GLFW_KEY_ESCAPE) {
             this.pendingGuiBindSlot = -1;
@@ -1150,8 +1146,8 @@ public final class BuilderScreen extends Screen {
             this.craftSearchBox.charTyped(codePoint, modifiers);
             return true;
         }
-        if (this.ultiminePanel.isLimitEditing()) {
-            return this.ultiminePanel.handleCharTyped(codePoint);
+        if (this.floatingWindowLayer.charTyped(codePoint, modifiers)) {
+            return true;
         }
         return super.charTyped(codePoint, modifiers);
     }
@@ -1451,15 +1447,6 @@ public final class BuilderScreen extends Screen {
         return this.floatingWindowLayer;
     }
 
-    /** Adjusts the ultimine (vein-mining) block limit by a delta. */
-    private void adjustUltimineLimit(int delta) {
-        this.ultiminePanel.adjustLimit(delta);
-    }
-    /** Returns whether the mouse is inside the ultimine limit text input field. */
-    private boolean isInsideUltimineLimitInput(double mouseX, double mouseY) {
-        return this.ultiminePanel.isInsideLimitInput(mouseX, mouseY);
-    }
-
     /** Returns whether the ultimine panel is currently open. */
     public boolean isUltimineOpen() {
         return this.ultiminePanel.isOpen();
@@ -1467,6 +1454,10 @@ public final class BuilderScreen extends Screen {
     /** Returns the current ultimine block limit. */
     public int getUltimineLimit() {
         return this.ultiminePanel.getLimit();
+    }
+    /** Returns the current ultimine mode (CHAIN or AREA). */
+    public UltimineMode getUltimineMode() {
+        return this.ultiminePanel.getMode();
     }
     /** Sets the last sent ultimine limit value (to avoid redundant network packets). */
     public void setUltimineLastSentLimit(int limit) {
@@ -1926,13 +1917,20 @@ public final class BuilderScreen extends Screen {
         }
         boolean creative = this.minecraft.player != null && this.minecraft.player.isCreative();
         int limit = this.ultiminePanel.getLimit();
+        UltimineMode mode = this.ultiminePanel.getMode();
         return RtsUltimineCollector.collect(
                 this.minecraft.level,
                 seed,
                 limit,
-                (pos, state, originalState) -> !state.isAir()
-                        && state.getBlock() == originalState.getBlock()
-                        && (creative || state.getDestroySpeed(this.minecraft.level, pos) >= 0.0F));
+                (pos, state, originalState) -> {
+                    if (state.isAir() || (!creative && state.getDestroySpeed(this.minecraft.level, pos) < 0.0F)) {
+                        return false;
+                    }
+                    if (mode == UltimineMode.AREA) {
+                        return true;
+                    }
+                    return state.getBlock() == originalState.getBlock();
+                });
     }
 
     /**

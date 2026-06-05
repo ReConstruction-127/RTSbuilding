@@ -135,4 +135,22 @@ public record RtsFloatingWindowLayer(List<RtsWindowPanel> frontToBackWindows) {
         }
         return false;
     }
+
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        for (int i = this.frontToBackWindows.size() - 1; i >= 0; i--) {
+            if (this.frontToBackWindows.get(i).keyPressed(keyCode, scanCode, modifiers)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public boolean charTyped(char codePoint, int modifiers) {
+        for (int i = this.frontToBackWindows.size() - 1; i >= 0; i--) {
+            if (this.frontToBackWindows.get(i).charTyped(codePoint, modifiers)) {
+                return true;
+            }
+        }
+        return false;
+    }
 }

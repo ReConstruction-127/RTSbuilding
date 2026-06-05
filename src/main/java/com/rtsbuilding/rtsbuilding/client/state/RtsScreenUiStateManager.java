@@ -7,6 +7,7 @@ import com.rtsbuilding.rtsbuilding.client.screen.ScreenShapeController;
 import com.rtsbuilding.rtsbuilding.client.screen.panel.RtsWindowPanel;
 import com.rtsbuilding.rtsbuilding.client.screen.quickbuild.QuickBuildPanel;
 import com.rtsbuilding.rtsbuilding.client.screen.shape.ShapeBuildTypes;
+import com.rtsbuilding.rtsbuilding.client.screen.ultimine.UltimineMode;
 import com.rtsbuilding.rtsbuilding.client.screen.ultimine.UltiminePanel;
 import net.minecraft.util.Mth;
 
@@ -161,6 +162,7 @@ public final class RtsScreenUiStateManager {
         state.quickBuildOpen = this.quickBuildPanel.isQuickBuildOpen();
         state.ultimineOpen = this.ultiminePanel.isOpen();
         state.ultimineLimit = this.ultiminePanel.getLimit();
+        state.ultimineMode = this.ultiminePanel.getMode().name();
         state.chunkCurtainVisible = this.controller.isChunkCurtainVisible();
         state.rtsGuiScale = sanitizeRtsGuiScale(this.fixedRtsGuiScale);
         state.inputSensitivityIndex = this.controller.getInputSensitivityIndex();
@@ -183,6 +185,11 @@ public final class RtsScreenUiStateManager {
         this.quickBuildPanel.setQuickBuildOpen(state.quickBuildOpen);
         this.ultiminePanel.applyOpenState(state.ultimineOpen);
         this.ultiminePanel.setLimit(state.ultimineLimit);
+        try {
+            this.ultiminePanel.setMode(UltimineMode.valueOf(state.ultimineMode));
+        } catch (IllegalArgumentException ignored) {
+            this.ultiminePanel.setMode(UltimineMode.CHAIN);
+        }
     }
 
     /** 恢复相机、区块帷幕等视觉偏好。 */

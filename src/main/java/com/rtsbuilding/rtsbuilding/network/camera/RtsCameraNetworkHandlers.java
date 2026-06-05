@@ -1,6 +1,6 @@
 package com.rtsbuilding.rtsbuilding.network.camera;
 
-import com.rtsbuilding.rtsbuilding.server.RtsCameraManager;
+import com.rtsbuilding.rtsbuilding.server.camera.RtsCameraManager;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 

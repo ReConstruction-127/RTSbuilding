@@ -194,6 +194,10 @@ public final class ClientRtsController {
     private int activeMineToolSlot;
     private BlockPos mineRenderPos;
     private int mineRenderStage = -1;
+    /** Ultimine overall progress: number of blocks already processed. Negative = no ultimine in progress. */
+    private int ultimineProgressProcessed = -1;
+    /** Ultimine overall progress: total number of target blocks. */
+    private int ultimineProgressTotal = 0;
     private BuildShape buildShape = BuildShape.BLOCK;
     private boolean pendingCraftTerminalOpen;
     private int pendingCraftTerminalOpenTicks;
@@ -941,6 +945,8 @@ public final class ClientRtsController {
             this.activeMineFace = -1;
             this.mineRenderPos = null;
             this.mineRenderStage = -1;
+            this.ultimineProgressProcessed = -1;
+            this.ultimineProgressTotal = 0;
             this.buildShape = BuildShape.BLOCK;
             this.funnelEnabled = false;
             this.lastFunnelTarget = null;
@@ -1009,6 +1015,8 @@ public final class ClientRtsController {
         }
         this.mineRenderPos = null;
         this.mineRenderStage = -1;
+        this.ultimineProgressProcessed = -1;
+        this.ultimineProgressTotal = 0;
         clearStorageScanState();
         this.storagePageReceivedAtMs = 0L;
 
@@ -1253,6 +1261,8 @@ public final class ClientRtsController {
         }
         this.mineRenderPos = null;
         this.mineRenderStage = -1;
+        this.ultimineProgressProcessed = -1;
+        this.ultimineProgressTotal = 0;
         clearRemoteMenuValidationState();
 
         if (minecraft.screen instanceof BuilderScreen
@@ -1974,6 +1984,11 @@ public final class ClientRtsController {
         this.mineRenderStage = Math.min(9, stage);
     }
 
+    public void applyUltimineProgress(S2CRtsUltimineProgressPayload payload) {
+        this.ultimineProgressProcessed = payload.processed();
+        this.ultimineProgressTotal = payload.total();
+    }
+
     public void applyProgressionState(S2CRtsProgressionStatePayload payload) {
         this.progressionEnabled = payload.enabled();
         this.progressionHomeSet = payload.homeSet();
@@ -2419,7 +2434,7 @@ public final class ClientRtsController {
                 this.allowPlacedBlockRecovery);
     }
 
-    public void startUltimine(BlockPos pos, int face, int toolSlot, int limit) {
+    public void startUltimine(BlockPos pos, int face, int toolSlot, int limit, byte mode) {
         if (pos == null) {
             return;
         }
@@ -2434,7 +2449,8 @@ public final class ClientRtsController {
                 this.activeMineToolSlot,
                 selectedMiningToolItemId(),
                 selectedMiningToolPrototype(),
-                limit);
+                limit,
+                mode);
     }
 
     public void continueMining(int toolSlot) {
@@ -2469,6 +2485,14 @@ public final class ClientRtsController {
 
     public int getMineProgressStage() {
         return this.mineRenderStage;
+    }
+
+    public int getUltimineProgressProcessed() {
+        return this.ultimineProgressProcessed;
+    }
+
+    public int getUltimineProgressTotal() {
+        return this.ultimineProgressTotal;
     }
 
     public BlockPos getMineProgressPos() {

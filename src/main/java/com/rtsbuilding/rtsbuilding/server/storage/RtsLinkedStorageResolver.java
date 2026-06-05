@@ -1,21 +1,23 @@
-package com.rtsbuilding.rtsbuilding.server;
+package com.rtsbuilding.rtsbuilding.server.storage;
 
 import java.util.ArrayList;
 import java.util.List;
 
-import com.rtsbuilding.rtsbuilding.compat.ae2.RtsAe2Compat;
+import java.util.ArrayList;
+import java.util.List;
+
 import com.rtsbuilding.rtsbuilding.compat.bd.RtsBdCompat;
 import com.rtsbuilding.rtsbuilding.network.storage.C2SRtsLinkStoragePayload;
 
+import com.rtsbuilding.rtsbuilding.server.RtsStorageManager;
+import com.rtsbuilding.rtsbuilding.server.camera.RtsCameraManager;
+import com.rtsbuilding.rtsbuilding.server.progression.RtsProgressionManager;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
-import net.neoforged.neoforge.capabilities.Capabilities;
-import net.neoforged.neoforge.fluids.FluidStack;
 import net.neoforged.neoforge.fluids.capability.IFluidHandler;
 import net.neoforged.neoforge.items.IItemHandler;
 
@@ -34,7 +36,7 @@ import net.neoforged.neoforge.items.IItemHandler;
  * extractions should call instead of reaching back into the full storage
  * manager.
  */
-final class RtsLinkedStorageResolver {
+public final class RtsLinkedStorageResolver {
     private static final byte LINK_MODE_BIDIRECTIONAL = C2SRtsLinkStoragePayload.MODE_BIDIRECTIONAL;
     private static final byte LINK_MODE_EXTRACT_ONLY = C2SRtsLinkStoragePayload.MODE_EXTRACT_ONLY;
 
@@ -42,64 +44,10 @@ final class RtsLinkedStorageResolver {
     }
 
     /**
-     * Block capability probing belongs here because linked refs are the only
-     * storage path that should scan direct and sided item handlers.
-     */
-    static IItemHandler findHandler(ServerPlayer player, BlockPos pos) {
-        if (!player.serverLevel().hasChunkAt(pos)) {
-            return null;
-        }
-        IItemHandler direct = player.serverLevel().getCapability(Capabilities.ItemHandler.BLOCK, pos, null);
-        if (direct != null) {
-            return direct;
-        }
-        for (Direction direction : Direction.values()) {
-            IItemHandler sided = player.serverLevel().getCapability(Capabilities.ItemHandler.BLOCK, pos, direction);
-            if (sided != null) {
-                return sided;
-            }
-        }
-        return null;
-    }
-
-    /**
-     * AE2 virtual network lookup is part of resolving what a linked ref exposes
-     * as an item handler.
-     */
-    static IItemHandler findLinkedItemHandler(ServerPlayer player, BlockPos pos) {
-        IItemHandler ae2Network = RtsAe2Compat.createNetworkItemHandler(player, pos);
-        if (ae2Network != null) {
-            return ae2Network;
-        }
-        return findHandler(player, pos);
-    }
-
-    /**
-     * Fluid capability probing stays with linked resolution so item and fluid
-     * refs use the same chunk, side, and permission boundary.
-     */
-    static IFluidHandler findFluidHandler(ServerPlayer player, BlockPos pos) {
-        if (!player.serverLevel().hasChunkAt(pos)) {
-            return null;
-        }
-        IFluidHandler direct = player.serverLevel().getCapability(Capabilities.FluidHandler.BLOCK, pos, null);
-        if (direct != null) {
-            return direct;
-        }
-        for (Direction direction : Direction.values()) {
-            IFluidHandler sided = player.serverLevel().getCapability(Capabilities.FluidHandler.BLOCK, pos, direction);
-            if (sided != null) {
-                return sided;
-            }
-        }
-        return null;
-    }
-
-    /**
      * Linked labels are cached presentation for refs, so resolver owns the
      * fallback block-name lookup used by summaries and UI payloads.
      */
-    static String resolveDisplayName(ServerLevel level, BlockPos pos) {
+    public static String resolveDisplayName(ServerLevel level, BlockPos pos) {
         return level.getBlockState(pos).getBlock().getName().getString();
     }
 
@@ -107,7 +55,7 @@ final class RtsLinkedStorageResolver {
      * Resolves every currently accessible item endpoint, including BD network
      * fallback, into handlers that already enforce extract-only store rules.
      */
-    static List<LinkedHandler> resolveLinkedHandlers(ServerPlayer player, RtsStorageSession session) {
+    public static List<LinkedHandler> resolveLinkedHandlers(ServerPlayer player, RtsStorageSession session) {
         sanitizeSessionDimension(player, session);
         List<LinkedHandler> out = new ArrayList<>();
 
@@ -124,7 +72,7 @@ final class RtsLinkedStorageResolver {
                 if (!player.serverLevel().hasChunkAt(pos)) {
                     continue;
                 }
-                IItemHandler handler = findLinkedItemHandler(player, pos);
+                IItemHandler handler = RtsLinkedCapabilities.findLinkedItemHandler(player, pos);
                 if (handler == null) {
                     continue;
                 }
@@ -152,7 +100,7 @@ final class RtsLinkedStorageResolver {
      * Resolves fluid endpoints alongside item endpoints so extract-only links
      * cannot accept stored fluid while still allowing extraction.
      */
-    static List<LinkedFluidHandler> resolveLinkedFluidHandlers(ServerPlayer player, RtsStorageSession session) {
+    public static List<LinkedFluidHandler> resolveLinkedFluidHandlers(ServerPlayer player, RtsStorageSession session) {
         sanitizeSessionDimension(player, session);
         List<LinkedFluidHandler> out = new ArrayList<>();
 
@@ -169,7 +117,7 @@ final class RtsLinkedStorageResolver {
                 if (!player.serverLevel().hasChunkAt(pos)) {
                     continue;
                 }
-                IFluidHandler handler = findFluidHandler(player, pos);
+                IFluidHandler handler = RtsLinkedCapabilities.findFluidHandler(player, pos);
                 if (handler == null) {
                     continue;
                 }
@@ -197,7 +145,7 @@ final class RtsLinkedStorageResolver {
      * Linked refs are world targets, so resolver owns the shared camera, chunk,
      * interaction, and home-radius gate used before resolving them.
      */
-    static boolean canAccessWorldTarget(ServerPlayer player, BlockPos pos) {
+    public static boolean canAccessWorldTarget(ServerPlayer player, BlockPos pos) {
         if (!RtsCameraManager.isActive(player) || pos == null) {
             return false;
         }
@@ -219,7 +167,7 @@ final class RtsLinkedStorageResolver {
      * Storage availability includes normal linked refs and the BD network
      * fallback because both resolve through this boundary.
      */
-    static boolean hasAnyStorage(ServerPlayer player, RtsStorageSession session) {
+    public static boolean hasAnyStorage(ServerPlayer player, RtsStorageSession session) {
         if (session == null) {
             return false;
         }
@@ -233,7 +181,7 @@ final class RtsLinkedStorageResolver {
      * The UI summary describes the currently resolvable linked-storage source,
      * so it stays paired with availability checks.
      */
-    static String buildAnyStorageSummary(ServerPlayer player, RtsStorageSession session) {
+    public static String buildAnyStorageSummary(ServerPlayer player, RtsStorageSession session) {
         if (session == null) {
             return "No Storage";
         }
@@ -250,7 +198,7 @@ final class RtsLinkedStorageResolver {
      * Ref cleanup belongs to resolver so every lookup starts from the same
      * valid identity set without touching unrelated session state.
      */
-    static void sanitizeSessionDimension(ServerPlayer player, RtsStorageSession session) {
+    public static void sanitizeSessionDimension(ServerPlayer player, RtsStorageSession session) {
         if (session == null || session.linkedStorages.isEmpty()) {
             return;
         }
@@ -263,7 +211,7 @@ final class RtsLinkedStorageResolver {
      * Summary text is presentation derived from linked refs and extract-only
      * modes, not page-building state.
      */
-    static String buildLinkedSummary(RtsStorageSession session) {
+    public static String buildLinkedSummary(RtsStorageSession session) {
         int count = session.linkedStorages.size();
         if (count <= 0) {
             return "No Storage";
@@ -289,168 +237,17 @@ final class RtsLinkedStorageResolver {
      * Link mode normalization is reused by persistence and resolver permission
      * checks so saved data and runtime handlers cannot disagree.
      */
-    static byte sanitizeLinkMode(byte linkMode) {
+    public static byte sanitizeLinkMode(byte linkMode) {
         return linkMode == LINK_MODE_EXTRACT_ONLY ? LINK_MODE_EXTRACT_ONLY : LINK_MODE_BIDIRECTIONAL;
-    }
-
-    /**
-     * Insert-anywhere is a linked-handler capability detail. Transfer code asks
-     * this boundary first so it does not need to know whether the endpoint is an
-     * extract-only view, an AE2 virtual handler, or a normal slotted inventory.
-     */
-    static ItemStack insertItemAnywhereIfSupported(IItemHandler handler, ItemStack stack, boolean simulate) {
-        if (handler == null || stack == null || stack.isEmpty()) {
-            return ItemStack.EMPTY;
-        }
-        if (handler instanceof LinkedItemHandlerView linkedView && linkedView.supportsAnySlotInsert()) {
-            return linkedView.insertItemAnywhere(stack, simulate);
-        }
-        if (handler instanceof RtsAe2Compat.AnySlotInsertItemHandler anySlot) {
-            return anySlot.insertItemAnywhere(stack, simulate);
-        }
-        return null;
-    }
-
-    static ItemStack insertItemAnywhere(IItemHandler handler, ItemStack stack, boolean simulate) {
-        ItemStack supported = insertItemAnywhereIfSupported(handler, stack, simulate);
-        if (supported != null) {
-            return supported;
-        }
-        ItemStack remain = stack == null ? ItemStack.EMPTY : stack.copy();
-        for (int slot = 0; handler != null && slot < handler.getSlots() && !remain.isEmpty(); slot++) {
-            remain = handler.insertItem(slot, remain, simulate);
-        }
-        return remain;
     }
 
     /**
      * Extract-only is a linked-ref permission that directly controls the
      * resolver's handler views.
      */
-    static boolean isExtractOnlyLink(RtsStorageSession session, LinkedStorageRef ref) {
+    public static boolean isExtractOnlyLink(RtsStorageSession session, LinkedStorageRef ref) {
         return session != null
                 && ref != null
                 && sanitizeLinkMode(session.linkedModes.getOrDefault(ref, LINK_MODE_BIDIRECTIONAL)) == LINK_MODE_EXTRACT_ONLY;
-    }
-}
-
-record LinkedHandler(LinkedStorageRef ref, String name, IItemHandler handler, boolean allowStore) {
-    BlockPos pos() {
-        return this.ref.pos();
-    }
-}
-
-record LinkedFluidHandler(LinkedStorageRef ref, String name, IFluidHandler handler, boolean allowStore) {
-    BlockPos pos() {
-        return this.ref.pos();
-    }
-}
-
-final class LinkedItemHandlerView implements IItemHandler, RtsAe2Compat.ReportedCountItemHandler {
-    private final IItemHandler delegate;
-    private final boolean allowStore;
-
-    LinkedItemHandlerView(IItemHandler delegate, boolean allowStore) {
-        this.delegate = delegate;
-        this.allowStore = allowStore;
-    }
-
-    @Override
-    public int getSlots() {
-        return this.delegate.getSlots();
-    }
-
-    @Override
-    public ItemStack getStackInSlot(int slot) {
-        return this.delegate.getStackInSlot(slot);
-    }
-
-    @Override
-    public ItemStack insertItem(int slot, ItemStack stack, boolean simulate) {
-        return this.allowStore ? this.delegate.insertItem(slot, stack, simulate) : stack;
-    }
-
-    boolean supportsAnySlotInsert() {
-        return this.allowStore && this.delegate instanceof RtsAe2Compat.AnySlotInsertItemHandler;
-    }
-
-    ItemStack insertItemAnywhere(ItemStack stack, boolean simulate) {
-        if (!this.allowStore) {
-            return stack == null ? ItemStack.EMPTY : stack.copy();
-        }
-        if (this.delegate instanceof RtsAe2Compat.AnySlotInsertItemHandler anySlot) {
-            return anySlot.insertItemAnywhere(stack, simulate);
-        }
-        ItemStack remain = stack == null ? ItemStack.EMPTY : stack.copy();
-        for (int slot = 0; slot < this.delegate.getSlots() && !remain.isEmpty(); slot++) {
-            remain = this.delegate.insertItem(slot, remain, simulate);
-        }
-        return remain;
-    }
-
-    @Override
-    public ItemStack extractItem(int slot, int amount, boolean simulate) {
-        return this.delegate.extractItem(slot, amount, simulate);
-    }
-
-    @Override
-    public int getSlotLimit(int slot) {
-        return this.delegate.getSlotLimit(slot);
-    }
-
-    @Override
-    public boolean isItemValid(int slot, ItemStack stack) {
-        return this.delegate.isItemValid(slot, stack);
-    }
-
-    @Override
-    public long getReportedCount(int slot) {
-        ItemStack stack = this.delegate.getStackInSlot(slot);
-        return RtsAe2Compat.getReportedCount(this.delegate, slot, stack);
-    }
-}
-
-final class LinkedFluidHandlerView implements IFluidHandler {
-    private final IFluidHandler delegate;
-    private final boolean allowStore;
-
-    LinkedFluidHandlerView(IFluidHandler delegate, boolean allowStore) {
-        this.delegate = delegate;
-        this.allowStore = allowStore;
-    }
-
-    @Override
-    public int getTanks() {
-        return this.delegate.getTanks();
-    }
-
-    @Override
-    public FluidStack getFluidInTank(int tank) {
-        return this.delegate.getFluidInTank(tank);
-    }
-
-    @Override
-    public int getTankCapacity(int tank) {
-        return this.delegate.getTankCapacity(tank);
-    }
-
-    @Override
-    public boolean isFluidValid(int tank, FluidStack stack) {
-        return this.delegate.isFluidValid(tank, stack);
-    }
-
-    @Override
-    public int fill(FluidStack resource, FluidAction action) {
-        return this.allowStore ? this.delegate.fill(resource, action) : 0;
-    }
-
-    @Override
-    public FluidStack drain(FluidStack resource, FluidAction action) {
-        return this.delegate.drain(resource, action);
-    }
-
-    @Override
-    public FluidStack drain(int maxDrain, FluidAction action) {
-        return this.delegate.drain(maxDrain, action);
     }
 }

@@ -1,15 +1,14 @@
 package com.rtsbuilding.rtsbuilding;
 
 
-import com.rtsbuilding.rtsbuilding.client.bootstrap.RtsClientBootstrap;
 import org.slf4j.Logger;
 
 import com.mojang.logging.LogUtils;
 import com.rtsbuilding.rtsbuilding.entity.RtsCameraEntity;
 import com.rtsbuilding.rtsbuilding.blueprint.server.BlueprintPlacementService;
-import com.rtsbuilding.rtsbuilding.server.RtsCameraManager;
-import com.rtsbuilding.rtsbuilding.server.RtsDamageFeedbackManager;
-import com.rtsbuilding.rtsbuilding.server.RtsProgressionManager;
+import com.rtsbuilding.rtsbuilding.server.camera.RtsCameraManager;
+import com.rtsbuilding.rtsbuilding.server.feedback.RtsDamageFeedbackManager;
+import com.rtsbuilding.rtsbuilding.server.progression.RtsProgressionManager;
 import com.rtsbuilding.rtsbuilding.server.RtsStorageManager;
 
 import net.minecraft.core.registries.Registries;

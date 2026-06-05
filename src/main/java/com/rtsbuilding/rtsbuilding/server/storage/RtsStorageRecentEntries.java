@@ -1,6 +1,7 @@
-package com.rtsbuilding.rtsbuilding.server;
+package com.rtsbuilding.rtsbuilding.server.storage;
 
 import com.rtsbuilding.rtsbuilding.network.storage.S2CRtsStoragePagePayload;
+import com.rtsbuilding.rtsbuilding.server.RtsStorageManager;
 import com.rtsbuilding.rtsbuilding.util.RtsCountUtil;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -23,7 +24,7 @@ import net.neoforged.neoforge.fluids.FluidStack;
  * behavior must stay stable: equivalent item/fluid entries merge, the newest
  * entry appears first, and the history is trimmed to the storage UI limit.
  */
-final class RtsStorageRecentEntries {
+public final class RtsStorageRecentEntries {
     private RtsStorageRecentEntries() {
     }
 
@@ -59,7 +60,7 @@ final class RtsStorageRecentEntries {
      * callers must pass the stable registry id rather than a translated display
      * name so recent history survives language changes.
      */
-    static void recordRecentItem(RtsStorageSession session, String itemId, byte kind, long amount) {
+    public static void recordRecentItem(RtsStorageSession session, String itemId, byte kind, long amount) {
         if (itemId == null || itemId.isBlank()) {
             return;
         }

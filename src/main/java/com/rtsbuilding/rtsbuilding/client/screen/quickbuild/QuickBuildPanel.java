@@ -138,7 +138,7 @@ public final class QuickBuildPanel extends RtsWindowPanel {
 
     /** 当形状切换时刷新所有按钮贴图（选中/未选中状态）。 */
     private void rebuildAllShapeButtons() {
-        for (int i = 0; i < SHAPES.length; i++) {
+        for (int i = 0; i < shapeButtons.length; i++) {
             shapeButtons[i] = createShapeButton(i);
         }
     }
@@ -149,7 +149,7 @@ public final class QuickBuildPanel extends RtsWindowPanel {
                 ShapeGeometryUtil.availableFillModes(controller.getBuildShape());
         fillModeButtons = new WindowButton[modes.size()];
         for (int i = 0; i < modes.size(); i++) {
-            final int idx = i;
+            int idx = i;
             fillModeButtons[i] = new WindowButton(0, 0, 84, 20,
                     Component.literal(screen.fillModeLabel(modes.get(i))), btn -> {
                 screen.setShapeFillMode(modes.get(idx));
@@ -217,7 +217,7 @@ public final class QuickBuildPanel extends RtsWindowPanel {
             rebuildFillModeButtons();
         }
         List<ShapeBuildTypes.ShapeFillMode> modes =
-                ShapeGeometryUtil.availableFillModes(this.controller.getBuildShape());
+                ShapeGeometryUtil.availableFillModes(controller.getBuildShape());
         for (int i = 0; i < fillModeButtons.length; i++) {
             int rowY = bodyY + 20 + (i * 38); // 垂直居中对齐对应行的形状按钮
             fillModeButtons[i].setX(rightX);

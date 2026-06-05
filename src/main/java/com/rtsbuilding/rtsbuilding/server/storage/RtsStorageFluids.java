@@ -1,4 +1,4 @@
-package com.rtsbuilding.rtsbuilding.server;
+package com.rtsbuilding.rtsbuilding.server.storage;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -7,6 +7,8 @@ import java.util.Optional;
 import com.rtsbuilding.rtsbuilding.network.builder.C2SRtsStoreFluidPayload;
 import com.rtsbuilding.rtsbuilding.network.storage.S2CRtsStoragePagePayload;
 
+import com.rtsbuilding.rtsbuilding.server.RtsStorageManager;
+import com.rtsbuilding.rtsbuilding.server.progression.RtsProgressionManager;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -42,14 +44,14 @@ import net.neoforged.neoforge.items.IItemHandler;
  * {@link RtsStorageManager}. Linked fluid capability probing stays in
  * {@link RtsLinkedStorageResolver}, not here.
  */
-final class RtsStorageFluids {
+public final class RtsStorageFluids {
     private static final int FLUID_TRANSFER_MB = FluidType.BUCKET_VOLUME;
     private static final long INTERNAL_FLUID_CAPACITY_MB = 100L * FluidType.BUCKET_VOLUME;
 
     private RtsStorageFluids() {
     }
 
-    static boolean storeFluidFromContainer(ServerPlayer player, RtsStorageSession session, List<IItemHandler> itemHandlers,
+    public static boolean storeFluidFromContainer(ServerPlayer player, RtsStorageSession session, List<IItemHandler> itemHandlers,
             List<LinkedFluidHandler> fluidHandlers, byte sourceType, byte toolSlot, String itemId) {
         List<IItemHandler> safeItemHandlers = itemHandlers == null ? List.of() : itemHandlers;
         List<LinkedFluidHandler> safeFluidHandlers = fluidHandlers == null ? List.of() : fluidHandlers;
@@ -62,7 +64,7 @@ final class RtsStorageFluids {
         };
     }
 
-    static boolean placeFluid(ServerPlayer player, RtsStorageSession session, List<LinkedFluidHandler> fluidHandlers,
+    public static boolean placeFluid(ServerPlayer player, RtsStorageSession session, List<LinkedFluidHandler> fluidHandlers,
             BlockPos clickedPos, Direction face, double hitX, double hitY, double hitZ, String fluidId) {
         if (session == null || fluidId == null || fluidId.isBlank()) {
             return false;
@@ -123,7 +125,7 @@ final class RtsStorageFluids {
         return false;
     }
 
-    static long internalFluidCapacityMb(ServerPlayer player) {
+    public static long internalFluidCapacityMb(ServerPlayer player) {
         if (player == null) {
             return INTERNAL_FLUID_CAPACITY_MB;
         }
@@ -304,7 +306,7 @@ final class RtsStorageFluids {
         return fluidStack.getAmount() - remaining;
     }
 
-    static long countFluidInNetwork(RtsStorageSession session, List<LinkedFluidHandler> fluidHandlers, Fluid fluid) {
+    public static long countFluidInNetwork(RtsStorageSession session, List<LinkedFluidHandler> fluidHandlers, Fluid fluid) {
         if (session == null || fluidHandlers == null || fluid == null) {
             return 0L;
         }
@@ -328,7 +330,7 @@ final class RtsStorageFluids {
         return total;
     }
 
-    static int extractFluidFromNetwork(RtsStorageSession session, List<LinkedFluidHandler> fluidHandlers,
+    public static int extractFluidFromNetwork(RtsStorageSession session, List<LinkedFluidHandler> fluidHandlers,
             Fluid fluid, int amount, boolean execute) {
         if (fluid == null || amount <= 0) {
             return 0;

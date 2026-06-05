@@ -74,5 +74,10 @@ public final class RtsBuilderPackets {
                 S2CRtsMineProgressPayload.TYPE,
                 S2CRtsMineProgressPayload.STREAM_CODEC,
                 RtsClientPayloadBridge::handleMineProgress);
+
+        registrar.playToClient(
+                S2CRtsUltimineProgressPayload.TYPE,
+                S2CRtsUltimineProgressPayload.STREAM_CODEC,
+                RtsClientPayloadBridge::handleUltimineProgress);
     }
 }

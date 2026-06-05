@@ -1,85 +1,34 @@
-package com.rtsbuilding.rtsbuilding.server;
+package com.rtsbuilding.rtsbuilding.server.storage;
 
-import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.Deque;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 import java.lang.reflect.Field;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
-import java.util.function.Predicate;
-import java.util.function.Supplier;
 
-import com.rtsbuilding.rtsbuilding.RtsbuildingMod;
-import com.rtsbuilding.rtsbuilding.common.BuilderMode;
-import com.rtsbuilding.rtsbuilding.common.RtsUltimineCollector;
-import com.rtsbuilding.rtsbuilding.compat.ae2.RtsAe2Compat;
-import com.rtsbuilding.rtsbuilding.compat.ftb.RtsFtbCompat;
-import com.rtsbuilding.rtsbuilding.compat.remote.RtsRemoteMenuCompat;
-import com.rtsbuilding.rtsbuilding.compat.bd.RtsBdCompat;
-import com.rtsbuilding.rtsbuilding.compat.sophisticatedstorage.RtsSophisticatedStorageCompat;
 import com.rtsbuilding.rtsbuilding.progression.RtsFeature;
-import com.rtsbuilding.rtsbuilding.network.builder.C2SRtsInteractPayload;
-import com.rtsbuilding.rtsbuilding.network.storage.C2SRtsLinkStoragePayload;
-import com.rtsbuilding.rtsbuilding.network.builder.C2SRtsPlaceBatchPayload;
-import com.rtsbuilding.rtsbuilding.network.builder.C2SRtsStoreFluidPayload;
-import com.rtsbuilding.rtsbuilding.network.storage.RtsStorageSort;
 import com.rtsbuilding.rtsbuilding.network.craft.S2CRtsCraftablesPayload;
 import com.rtsbuilding.rtsbuilding.network.craft.S2CRtsCraftFeedbackPayload;
-import com.rtsbuilding.rtsbuilding.network.builder.S2CRtsMineProgressPayload;
-import com.rtsbuilding.rtsbuilding.network.progression.S2CRtsQuestDetectStatusPayload;
-import com.rtsbuilding.rtsbuilding.network.storage.S2CRtsRemoteMenuHintPayload;
 import com.rtsbuilding.rtsbuilding.network.storage.S2CRtsStoragePagePayload;
+import com.rtsbuilding.rtsbuilding.server.RtsStorageManager;
+import com.rtsbuilding.rtsbuilding.server.menu.RtsCraftTerminalMenu;
+import com.rtsbuilding.rtsbuilding.server.progression.RtsProgressionManager;
 import com.rtsbuilding.rtsbuilding.util.RtsPinyinSearch;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
 import net.minecraft.core.NonNullList;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.core.registries.Registries;
-import net.minecraft.nbt.CompoundTag;
-import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
-import net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket;
-import net.minecraft.network.protocol.game.ClientboundSoundPacket;
-import net.minecraft.sounds.SoundEvent;
-import net.minecraft.sounds.SoundEvents;
-import net.minecraft.sounds.SoundSource;
-import net.minecraft.world.Container;
-import net.minecraft.world.InteractionHand;
-import net.minecraft.world.InteractionResult;
-import net.minecraft.world.MenuProvider;
 import net.minecraft.world.SimpleMenuProvider;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.ai.attributes.Attributes;
-import net.minecraft.world.entity.item.ItemEntity;
-import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.AxeItem;
-import net.minecraft.world.item.BoneMealItem;
-import net.minecraft.world.item.BlockItem;
-import net.minecraft.world.item.CreativeModeTab;
-import net.minecraft.world.item.HoeItem;
-import net.minecraft.world.item.Items;
-import net.minecraft.world.item.ShearsItem;
-import net.minecraft.world.item.ShovelItem;
-import net.minecraft.world.item.enchantment.Enchantments;
-import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.item.crafting.CraftingRecipe;
 import net.minecraft.world.item.crafting.CraftingInput;
 import net.minecraft.world.item.crafting.Ingredient;
@@ -87,34 +36,13 @@ import net.minecraft.world.item.crafting.RecipeHolder;
 import net.minecraft.world.item.crafting.RecipeType;
 import net.minecraft.world.item.crafting.ShapedRecipe;
 import net.minecraft.world.item.crafting.ShapelessRecipe;
-import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.ContainerLevelAccess;
 import net.minecraft.world.inventory.CraftingContainer;
 import net.minecraft.world.inventory.CraftingMenu;
-import net.minecraft.world.inventory.InventoryMenu;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.entity.BlockEntity;
-import net.minecraft.world.level.block.LiquidBlockContainer;
-import net.minecraft.world.level.block.SoundType;
-import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.block.Rotation;
-import net.minecraft.world.level.material.Fluid;
-import net.minecraft.world.phys.AABB;
-import net.minecraft.world.phys.BlockHitResult;
-import net.minecraft.world.phys.Vec3;
-import net.minecraft.tags.FluidTags;
-import net.neoforged.neoforge.capabilities.Capabilities;
-import net.neoforged.neoforge.fluids.FluidStack;
-import net.neoforged.neoforge.fluids.FluidType;
-import net.neoforged.neoforge.fluids.FluidUtil;
-import net.neoforged.neoforge.fluids.capability.IFluidHandler;
-import net.neoforged.neoforge.fluids.capability.IFluidHandlerItem;
 import net.neoforged.neoforge.items.IItemHandler;
 import net.neoforged.neoforge.network.PacketDistributor;
-
-import com.rtsbuilding.rtsbuilding.server.data.PlacedBlockTrackerData;
-import com.rtsbuilding.rtsbuilding.server.data.RtsStorageSessionStore;
 
 /**
  * Server-side crafting service for RTS linked storage.
@@ -132,7 +60,7 @@ import com.rtsbuilding.rtsbuilding.server.data.RtsStorageSessionStore;
  * buttons open the same terminal, craft the same recipes, refill the same grid,
  * and report the same missing/storage-full feedback in multiplayer.
  */
-final class RtsStorageCrafting {
+public final class RtsStorageCrafting {
     private RtsStorageCrafting() {
     }
 
@@ -148,7 +76,7 @@ final class RtsStorageCrafting {
      * crafted recent-entry update; it does not move the output stack, alter the
      * menu click behavior, or change the old session-save timing.
      */
-    static void recordCraftedOutput(ServerPlayer player, RtsStorageSession session, ItemStack crafted) {
+    public static void recordCraftedOutput(ServerPlayer player, RtsStorageSession session, ItemStack crafted) {
         if (player == null || crafted == null || crafted.isEmpty()) {
             return;
         }
@@ -169,7 +97,7 @@ final class RtsStorageCrafting {
      * craft terminal button opens the same 3x3 crafting menu only after storage
      * is linked, then refreshes the RTS storage browser behind it.
      */
-    static void openCraftTerminal(ServerPlayer player, RtsStorageSession session) {
+    public static void openCraftTerminal(ServerPlayer player, RtsStorageSession session) {
         if (!RtsProgressionManager.canUse(player, RtsFeature.CRAFT_TERMINAL)) {
             return;
         }
@@ -212,7 +140,7 @@ final class RtsStorageCrafting {
      * returns an empty craftable panel, unavailable recipes obey the existing
      * toggle, and pagination appends with the same offsets.
      */
-    static void requestCraftables(ServerPlayer player, RtsStorageSession session, String search, boolean showUnavailable, int offset, int limit,
+    public static void requestCraftables(ServerPlayer player, RtsStorageSession session, String search, boolean showUnavailable, int offset, int limit,
             boolean pinyinSearchEnabled, List<String> localizedSearchMatches) {
         if (!RtsProgressionManager.canUse(player, RtsFeature.CRAFT_TERMINAL)) {
             return;
@@ -294,7 +222,7 @@ final class RtsStorageCrafting {
      * rules as the storage browser. Players must see the same one-click craft,
      * multi-craft, missing ingredient, and storage-full behavior as before.
      */
-    static void craftRecipeToLinked(ServerPlayer player, RtsStorageSession session, String recipeId, int craftCount) {
+    public static void craftRecipeToLinked(ServerPlayer player, RtsStorageSession session, String recipeId, int craftCount) {
         if (!RtsProgressionManager.canUse(player, RtsFeature.CRAFT_TERMINAL)) {
             return;
         }
@@ -781,7 +709,7 @@ final class RtsStorageCrafting {
      * not decide how stacks are inserted into storage; that remains in
      * {@link RtsStorageTransfers}.
      */
-    static void refillCraftGridFromLinked(ServerPlayer player, RtsStorageSession session, CraftingMenu craftingMenu, ItemStack[] blueprint) {
+    public static void refillCraftGridFromLinked(ServerPlayer player, RtsStorageSession session, CraftingMenu craftingMenu, ItemStack[] blueprint) {
         if (session == null || craftingMenu == null || blueprint == null || blueprint.length != 9) {
             return;
         }
@@ -812,7 +740,7 @@ final class RtsStorageCrafting {
      * packet fields, UI state names, or the player-visible blueprint matching
      * behavior. Invalid ids still become empty blueprint slots.
      */
-    static void refillCurrentCraftGridFromBlueprintIds(
+    public static void refillCurrentCraftGridFromBlueprintIds(
             ServerPlayer player,
             RtsStorageSession session,
             List<String> blueprintIds,
@@ -859,7 +787,7 @@ final class RtsStorageCrafting {
      * storage page refresh. It does not own JEI integration registration or
      * packet payload shape.
      */
-    static void applyJeiTransfer(ServerPlayer player, RtsStorageSession session, String recipeId, boolean maxTransfer, boolean clearGridFirst) {
+    public static void applyJeiTransfer(ServerPlayer player, RtsStorageSession session, String recipeId, boolean maxTransfer, boolean clearGridFirst) {
         if (!RtsProgressionManager.canUse(player, RtsFeature.JEI_TRANSFER)) {
             return;
         }
@@ -1239,7 +1167,7 @@ final class RtsStorageCrafting {
      * ownership record. Taking a craft result should still refill matching slots
      * without preserving source-slot identity.
      */
-    static ItemStack[] snapshotCraftGridBlueprint(CraftingMenu menu) {
+    public static ItemStack[] snapshotCraftGridBlueprint(CraftingMenu menu) {
         ItemStack[] blueprint = new ItemStack[9];
         for (int i = 0; i < 9; i++) {
             Slot grid = menu.getSlot(1 + i);
@@ -1256,7 +1184,7 @@ final class RtsStorageCrafting {
      * to recompute its result. It must keep the existing fill-one-pass versus
      * fill-all behavior used by normal result clicks and shift-craft imports.
      */
-    static void refillCraftGridFromBlueprint(CraftingMenu menu, List<IItemHandler> handlers, ServerPlayer player,
+    public static void refillCraftGridFromBlueprint(CraftingMenu menu, List<IItemHandler> handlers, ServerPlayer player,
             ItemStack[] blueprint, boolean fillAll, boolean includePlayerFallback) {
         if (blueprint == null || blueprint.length != 9) {
             return;

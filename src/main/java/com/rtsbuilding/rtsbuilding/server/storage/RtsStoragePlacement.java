@@ -1,4 +1,4 @@
-package com.rtsbuilding.rtsbuilding.server;
+package com.rtsbuilding.rtsbuilding.server.storage;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -6,8 +6,10 @@ import java.util.List;
 import com.rtsbuilding.rtsbuilding.network.builder.C2SRtsPlaceBatchPayload;
 import com.rtsbuilding.rtsbuilding.network.storage.S2CRtsStoragePagePayload;
 import com.rtsbuilding.rtsbuilding.progression.RtsFeature;
+import com.rtsbuilding.rtsbuilding.server.RtsStorageManager;
 import com.rtsbuilding.rtsbuilding.server.data.PlacedBlockTrackerData;
 
+import com.rtsbuilding.rtsbuilding.server.progression.RtsProgressionManager;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -42,7 +44,7 @@ import net.neoforged.neoforge.items.IItemHandler;
  * calls {@link RtsStorageTransfers} only at the extraction/refund boundary so
  * NBT-heavy and capability-backed stacks keep the same behavior as before.
  */
-final class RtsStoragePlacement {
+public final class RtsStoragePlacement {
     private static final double REMOTE_POV_BLOCK_REACH = 4.0D;
     private static final int QUICK_BUILD_BATCH_BLOCKS_PER_TICK = 64;
     private static final int QUICK_BUILD_BATCH_MAX_QUEUED_JOBS = 4;
@@ -51,7 +53,7 @@ final class RtsStoragePlacement {
     private RtsStoragePlacement() {
     }
 
-    static void placeSelected(ServerPlayer player, RtsStorageSession session, BlockPos clickedPos, Direction face,
+    public static void placeSelected(ServerPlayer player, RtsStorageSession session, BlockPos clickedPos, Direction face,
             double hitX, double hitY, double hitZ, byte rotateSteps, boolean forcePlace, boolean skipIfOccupied,
             String itemId, ItemStack itemPrototype, double rayOriginX, double rayOriginY, double rayOriginZ,
             double rayDirX, double rayDirY, double rayDirZ, boolean quickBuild) {
@@ -79,7 +81,7 @@ final class RtsStoragePlacement {
                 true);
     }
 
-    static void enqueuePlaceBatch(ServerPlayer player, RtsStorageSession session, List<BlockPos> clickedPositions,
+    public static void enqueuePlaceBatch(ServerPlayer player, RtsStorageSession session, List<BlockPos> clickedPositions,
             Direction face, byte rotateSteps, boolean forcePlace, boolean skipIfOccupied, String itemId,
             ItemStack itemPrototype, double rayOriginX, double rayOriginY, double rayOriginZ, double rayDirX, double rayDirY,
             double rayDirZ) {
@@ -122,7 +124,7 @@ final class RtsStoragePlacement {
                 rayDirZ));
     }
 
-    static void tickPlaceBatchJobs(ServerPlayer player, RtsStorageSession session) {
+    public static void tickPlaceBatchJobs(ServerPlayer player, RtsStorageSession session) {
         if (player == null || session == null) {
             return;
         }
@@ -440,7 +442,7 @@ final class RtsStoragePlacement {
         }
     }
 
-    static void playRemotePlacedBlockSound(ServerPlayer player, ServerLevel level, RtsStorageSession session, BlockPos pos,
+    public static void playRemotePlacedBlockSound(ServerPlayer player, ServerLevel level, RtsStorageSession session, BlockPos pos,
             boolean quickBuild) {
         if (player == null || level == null || pos == null || !level.hasChunkAt(pos)) {
             return;
@@ -477,7 +479,7 @@ final class RtsStoragePlacement {
         session.quickBuildSoundZ = pos.getZ() + 0.5D;
     }
 
-    static void tickQuickBuildCompletionSound(ServerPlayer player, RtsStorageSession session) {
+    public static void tickQuickBuildCompletionSound(ServerPlayer player, RtsStorageSession session) {
         if (player == null || session == null || session.quickBuildSoundPlacedCount <= 0) {
             return;
         }
@@ -499,7 +501,7 @@ final class RtsStoragePlacement {
         session.lastQuickBuildPlaceSoundTick = Long.MIN_VALUE;
     }
 
-    static BlockPos detectPlacedPos(ServerLevel level, BlockPos clickedPos, BlockState beforeClicked, BlockPos adjacentPos,
+    public static BlockPos detectPlacedPos(ServerLevel level, BlockPos clickedPos, BlockState beforeClicked, BlockPos adjacentPos,
             BlockState beforeAdjacent) {
         if (!level.hasChunkAt(clickedPos)) {
             return null;
@@ -519,7 +521,7 @@ final class RtsStoragePlacement {
         return null;
     }
 
-    static void rotatePlacedBlock(ServerLevel level, BlockPos pos, byte rotateSteps) {
+    public static void rotatePlacedBlock(ServerLevel level, BlockPos pos, byte rotateSteps) {
         int turns = rotateSteps & 3;
         if (turns == 0 || !level.hasChunkAt(pos)) {
             return;
@@ -534,7 +536,7 @@ final class RtsStoragePlacement {
         }
     }
 
-    static final class PlaceBatchJob {
+    public static final class PlaceBatchJob {
         private final List<BlockPos> clickedPositions;
         private final Direction face;
         private final byte rotateSteps;

@@ -1,4 +1,4 @@
-package com.rtsbuilding.rtsbuilding.server;
+package com.rtsbuilding.rtsbuilding.server.storage;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -7,6 +7,10 @@ import com.rtsbuilding.rtsbuilding.compat.bd.RtsBdCompat;
 import com.rtsbuilding.rtsbuilding.network.storage.S2CRtsStoragePagePayload;
 import com.rtsbuilding.rtsbuilding.progression.RtsFeature;
 
+import com.rtsbuilding.rtsbuilding.server.RtsStorageManager;
+import com.rtsbuilding.rtsbuilding.server.camera.RtsCameraManager;
+import com.rtsbuilding.rtsbuilding.server.menu.RtsCraftTerminalMenu;
+import com.rtsbuilding.rtsbuilding.server.progression.RtsProgressionManager;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
@@ -36,7 +40,7 @@ import net.neoforged.neoforge.items.IItemHandler;
  * placement. Those systems can call this boundary for insertion/extraction, but
  * their gameplay state machines stay in {@link RtsStorageManager}.
  */
-final class RtsStorageTransfers {
+public final class RtsStorageTransfers {
     private static final int PLAYER_HOTBAR_SLOT_COUNT = 9;
     private static final int PLAYER_MAIN_INVENTORY_END_EXCLUSIVE = 36;
     private static final int SHIFT_IMPORT_MAX_CRAFT_ITERATIONS = 64;
@@ -44,7 +48,7 @@ final class RtsStorageTransfers {
     private RtsStorageTransfers() {
     }
 
-    static void returnCarriedToLinked(ServerPlayer player, RtsStorageSession session, String itemId, int amount) {
+    public static void returnCarriedToLinked(ServerPlayer player, RtsStorageSession session, String itemId, int amount) {
         if (!RtsProgressionManager.canUse(player, RtsFeature.STORAGE_BROWSER)) {
             return;
         }
@@ -93,7 +97,7 @@ final class RtsStorageTransfers {
         RtsStorageManager.runQuestDetect(player, session, false);
     }
 
-    static void quickDropLinkedItem(ServerPlayer player, RtsStorageSession session, String itemId, byte amount, double dropX,
+    public static void quickDropLinkedItem(ServerPlayer player, RtsStorageSession session, String itemId, byte amount, double dropX,
             double dropY, double dropZ) {
         if (!RtsProgressionManager.canUse(player, RtsFeature.STORAGE_BROWSER)) {
             return;
@@ -140,7 +144,7 @@ final class RtsStorageTransfers {
         RtsStorageManager.requestPage(player, session.page, session.search, session.category, session.sort, session.ascending);
     }
 
-    static void importMenuSlotToLinked(ServerPlayer player, RtsStorageSession session, int menuSlot) {
+    public static void importMenuSlotToLinked(ServerPlayer player, RtsStorageSession session, int menuSlot) {
         if (!RtsProgressionManager.canUse(player, RtsFeature.CRAFT_TERMINAL)) {
             return;
         }
@@ -246,7 +250,7 @@ final class RtsStorageTransfers {
         RtsStorageManager.runQuestDetect(player, session, false);
     }
 
-    static void pickupLinkedToCarried(ServerPlayer player, RtsStorageSession session, ItemStack prototype, int amount) {
+    public static void pickupLinkedToCarried(ServerPlayer player, RtsStorageSession session, ItemStack prototype, int amount) {
         if (!RtsProgressionManager.canUse(player, RtsFeature.STORAGE_BROWSER)) {
             return;
         }
@@ -296,7 +300,7 @@ final class RtsStorageTransfers {
         RtsStorageManager.requestPage(player, session.page, session.search, session.category, session.sort, session.ascending);
     }
 
-    static void quickMoveLinkedItem(ServerPlayer player, RtsStorageSession session, ItemStack prototype) {
+    public static void quickMoveLinkedItem(ServerPlayer player, RtsStorageSession session, ItemStack prototype) {
         if (!RtsProgressionManager.canUse(player, RtsFeature.STORAGE_BROWSER)) {
             return;
         }
@@ -339,7 +343,7 @@ final class RtsStorageTransfers {
         RtsStorageManager.runQuestDetect(player, session, false);
     }
 
-    static void fillPlayerInventoryFromLinked(ServerPlayer player, RtsStorageSession session) {
+    public static void fillPlayerInventoryFromLinked(ServerPlayer player, RtsStorageSession session) {
         if (!RtsProgressionManager.canUse(player, RtsFeature.STORAGE_BROWSER)) {
             return;
         }
@@ -398,7 +402,7 @@ final class RtsStorageTransfers {
         }
     }
 
-    static ItemStack extractOne(IItemHandler handler, Item targetItem) {
+    public static ItemStack extractOne(IItemHandler handler, Item targetItem) {
         if (handler instanceof RtsBdCompat.DirectExtractHandler de) {
             return de.tryExtractItem(targetItem, 1, false);
         }
@@ -415,14 +419,14 @@ final class RtsStorageTransfers {
         return ItemStack.EMPTY;
     }
 
-    static ItemStack extractMatching(IItemHandler handler, Item targetItem, int limit) {
+    public static ItemStack extractMatching(IItemHandler handler, Item targetItem, int limit) {
         if (handler instanceof RtsBdCompat.DirectExtractHandler de) {
             return de.tryExtractItem(targetItem, limit, false);
         }
         return extractMatching(handler, targetItem, ItemStack.EMPTY, limit);
     }
 
-    static ItemStack extractMatching(IItemHandler handler, Item targetItem, ItemStack preferred, int limit) {
+    public static ItemStack extractMatching(IItemHandler handler, Item targetItem, ItemStack preferred, int limit) {
         int remaining = Math.max(0, limit);
         if (remaining <= 0) {
             return ItemStack.EMPTY;
@@ -465,7 +469,7 @@ final class RtsStorageTransfers {
         return out;
     }
 
-    static ItemStack extractOneFromLinked(List<IItemHandler> handlers, Item targetItem) {
+    public static ItemStack extractOneFromLinked(List<IItemHandler> handlers, Item targetItem) {
         for (IItemHandler handler : handlers) {
             ItemStack extracted = extractOne(handler, targetItem);
             if (!extracted.isEmpty()) {
@@ -475,7 +479,7 @@ final class RtsStorageTransfers {
         return ItemStack.EMPTY;
     }
 
-    static ItemStack extractOneFromPlayerMainInventory(ServerPlayer player, Item targetItem) {
+    public static ItemStack extractOneFromPlayerMainInventory(ServerPlayer player, Item targetItem) {
         if (player == null || targetItem == null) {
             return ItemStack.EMPTY;
         }
@@ -499,7 +503,7 @@ final class RtsStorageTransfers {
         return ItemStack.EMPTY;
     }
 
-    static ItemStack extractOneFromNetwork(List<IItemHandler> handlers, ServerPlayer player, Item targetItem) {
+    public static ItemStack extractOneFromNetwork(List<IItemHandler> handlers, ServerPlayer player, Item targetItem) {
         ItemStack extracted = extractOneFromLinked(handlers, targetItem);
         if (!extracted.isEmpty()) {
             return extracted;
@@ -507,11 +511,11 @@ final class RtsStorageTransfers {
         return extractOneFromPlayerMainInventory(player, targetItem);
     }
 
-    static ItemStack extractMatchingFromLinked(List<IItemHandler> handlers, Item targetItem, int limit) {
+    public static ItemStack extractMatchingFromLinked(List<IItemHandler> handlers, Item targetItem, int limit) {
         return extractMatchingFromLinked(handlers, targetItem, ItemStack.EMPTY, limit);
     }
 
-    static ItemStack extractMatchingFromLinked(List<IItemHandler> handlers, Item targetItem, ItemStack preferred, int limit) {
+    public static ItemStack extractMatchingFromLinked(List<IItemHandler> handlers, Item targetItem, ItemStack preferred, int limit) {
         int remaining = Math.max(0, limit);
         ItemStack out = ItemStack.EMPTY;
         for (IItemHandler handler : handlers) {
@@ -532,11 +536,11 @@ final class RtsStorageTransfers {
         return out;
     }
 
-    static ItemStack extractMatchingFromPlayerMainInventory(ServerPlayer player, Item targetItem, int limit) {
+    public static ItemStack extractMatchingFromPlayerMainInventory(ServerPlayer player, Item targetItem, int limit) {
         return extractMatchingFromPlayerMainInventory(player, targetItem, ItemStack.EMPTY, limit);
     }
 
-    static ItemStack extractMatchingFromPlayerMainInventory(ServerPlayer player, Item targetItem, ItemStack preferred, int limit) {
+    public static ItemStack extractMatchingFromPlayerMainInventory(ServerPlayer player, Item targetItem, ItemStack preferred, int limit) {
         if (player == null || targetItem == null) {
             return ItemStack.EMPTY;
         }
@@ -584,11 +588,11 @@ final class RtsStorageTransfers {
         return out;
     }
 
-    static ItemStack extractMatchingFromPlayerHotbarForQuickDrop(ServerPlayer player, Item targetItem, int limit) {
+    public static ItemStack extractMatchingFromPlayerHotbarForQuickDrop(ServerPlayer player, Item targetItem, int limit) {
         return extractMatchingFromPlayerHotbarForQuickDrop(player, targetItem, ItemStack.EMPTY, limit);
     }
 
-    static ItemStack extractMatchingFromPlayerHotbarForQuickDrop(ServerPlayer player, Item targetItem, ItemStack preferred,
+    public static ItemStack extractMatchingFromPlayerHotbarForQuickDrop(ServerPlayer player, Item targetItem, ItemStack preferred,
             int limit) {
         if (player == null || targetItem == null) {
             return ItemStack.EMPTY;
@@ -615,7 +619,7 @@ final class RtsStorageTransfers {
         return out;
     }
 
-    static ItemStack extractMatchingFromPlayerSlot(ServerPlayer player, Item targetItem, ItemStack preferred, int slot, int limit) {
+    public static ItemStack extractMatchingFromPlayerSlot(ServerPlayer player, Item targetItem, ItemStack preferred, int slot, int limit) {
         if (player == null || targetItem == null || slot < 0 || limit <= 0) {
             return ItemStack.EMPTY;
         }
@@ -640,7 +644,7 @@ final class RtsStorageTransfers {
         return extracted.isEmpty() ? ItemStack.EMPTY : extracted;
     }
 
-    static ItemStack mergeExtractedStacks(ItemStack into, ItemStack addition) {
+    public static ItemStack mergeExtractedStacks(ItemStack into, ItemStack addition) {
         if (addition == null || addition.isEmpty()) {
             return into;
         }
@@ -653,7 +657,7 @@ final class RtsStorageTransfers {
         return into;
     }
 
-    static ItemStack moveLinkedStackIntoOpenMenu(ServerPlayer player, ItemStack stack) {
+    public static ItemStack moveLinkedStackIntoOpenMenu(ServerPlayer player, ItemStack stack) {
         if (player == null || stack == null || stack.isEmpty()) {
             return ItemStack.EMPTY;
         }
@@ -706,11 +710,11 @@ final class RtsStorageTransfers {
         return remain;
     }
 
-    static ItemStack extractMatchingFromNetwork(List<IItemHandler> handlers, ServerPlayer player, Item targetItem, int limit) {
+    public static ItemStack extractMatchingFromNetwork(List<IItemHandler> handlers, ServerPlayer player, Item targetItem, int limit) {
         return extractMatchingFromNetwork(handlers, player, targetItem, ItemStack.EMPTY, limit);
     }
 
-    static ItemStack extractMatchingFromNetwork(List<IItemHandler> handlers, ServerPlayer player, Item targetItem,
+    public static ItemStack extractMatchingFromNetwork(List<IItemHandler> handlers, ServerPlayer player, Item targetItem,
             ItemStack preferred, int limit) {
         int remaining = Math.max(0, limit);
         if (remaining <= 0) {
@@ -736,7 +740,7 @@ final class RtsStorageTransfers {
         return out;
     }
 
-    static ItemStack extractMatchingFromQuickDropSources(List<IItemHandler> handlers, ServerPlayer player, Item targetItem, int limit) {
+    public static ItemStack extractMatchingFromQuickDropSources(List<IItemHandler> handlers, ServerPlayer player, Item targetItem, int limit) {
         int remaining = Math.max(0, limit);
         if (remaining <= 0) {
             return ItemStack.EMPTY;
@@ -760,15 +764,15 @@ final class RtsStorageTransfers {
         return out;
     }
 
-    static void refundToLinked(List<IItemHandler> handlers, ServerPlayer player, ItemStack stack) {
+    public static void refundToLinked(List<IItemHandler> handlers, ServerPlayer player, ItemStack stack) {
         storeToLinkedWithFallback(handlers, player, stack);
     }
 
-    static ItemStack insertToHandler(IItemHandler handler, ItemStack stack) {
-        return RtsLinkedStorageResolver.insertItemAnywhere(handler, stack, false);
+    public static ItemStack insertToHandler(IItemHandler handler, ItemStack stack) {
+        return RtsLinkedHandlerViews.insertItemAnywhere(handler, stack, false);
     }
 
-    static ItemStack storeToLinkedOnly(List<IItemHandler> handlers, ItemStack stack) {
+    public static ItemStack storeToLinkedOnly(List<IItemHandler> handlers, ItemStack stack) {
         ItemStack remain = stack.copy();
         for (IItemHandler handler : handlers) {
             if (remain.isEmpty()) {
@@ -779,7 +783,7 @@ final class RtsStorageTransfers {
         return remain;
     }
 
-    static OverflowOutcome storeToLinkedWithFallback(List<IItemHandler> handlers, ServerPlayer player, ItemStack stack) {
+    public static OverflowOutcome storeToLinkedWithFallback(List<IItemHandler> handlers, ServerPlayer player, ItemStack stack) {
         ItemStack remain = stack.copy();
         for (IItemHandler handler : handlers) {
             if (remain.isEmpty()) {
@@ -806,7 +810,7 @@ final class RtsStorageTransfers {
         return new OverflowOutcome(movedToInventory, dropped);
     }
 
-    static OverflowOutcome storeToLinkedWithFallbackPreferExisting(List<IItemHandler> handlers, ServerPlayer player,
+    public static OverflowOutcome storeToLinkedWithFallbackPreferExisting(List<IItemHandler> handlers, ServerPlayer player,
             ItemStack stack) {
         ItemStack remain = stack.copy();
         for (IItemHandler handler : handlers) {
@@ -834,7 +838,7 @@ final class RtsStorageTransfers {
         return new OverflowOutcome(movedToInventory, dropped);
     }
 
-    static ItemStack moveToPlayerInventoryOnly(ServerPlayer player, ItemStack stack) {
+    public static ItemStack moveToPlayerInventoryOnly(ServerPlayer player, ItemStack stack) {
         if (player == null || stack == null || stack.isEmpty()) {
             return ItemStack.EMPTY;
         }
@@ -843,7 +847,7 @@ final class RtsStorageTransfers {
         return remain;
     }
 
-    static int[] snapshotPlayerMatchingCounts(ServerPlayer player, ItemStack prototype) {
+    public static int[] snapshotPlayerMatchingCounts(ServerPlayer player, ItemStack prototype) {
         int size = player.getInventory().getContainerSize();
         int[] counts = new int[size];
         for (int i = 0; i < size; i++) {
@@ -855,7 +859,7 @@ final class RtsStorageTransfers {
         return counts;
     }
 
-    static ItemStack extractOneMatchingPrototypeCombined(List<IItemHandler> handlers, ServerPlayer player, ItemStack prototype) {
+    public static ItemStack extractOneMatchingPrototypeCombined(List<IItemHandler> handlers, ServerPlayer player, ItemStack prototype) {
         ItemStack fromLinked = extractOneMatchingPrototypeFromLinked(handlers, prototype);
         if (!fromLinked.isEmpty()) {
             return fromLinked;
@@ -863,7 +867,7 @@ final class RtsStorageTransfers {
         return extractOneMatchingPrototypeFromPlayer(player, prototype);
     }
 
-    static ItemStack extractOneMatchingPrototypeFromLinked(List<IItemHandler> handlers, ItemStack prototype) {
+    public static ItemStack extractOneMatchingPrototypeFromLinked(List<IItemHandler> handlers, ItemStack prototype) {
         if (prototype == null || prototype.isEmpty()) {
             return ItemStack.EMPTY;
         }
@@ -882,7 +886,7 @@ final class RtsStorageTransfers {
         return ItemStack.EMPTY;
     }
 
-    static ItemStack extractOneMatchingPrototypeFromPlayer(ServerPlayer player, ItemStack prototype) {
+    public static ItemStack extractOneMatchingPrototypeFromPlayer(ServerPlayer player, ItemStack prototype) {
         if (player == null || prototype == null || prototype.isEmpty()) {
             return ItemStack.EMPTY;
         }
@@ -906,7 +910,7 @@ final class RtsStorageTransfers {
         return ItemStack.EMPTY;
     }
 
-    static ItemStack drainPlayerInventoryDelta(ServerPlayer player, ItemStack prototype, int[] before) {
+    public static ItemStack drainPlayerInventoryDelta(ServerPlayer player, ItemStack prototype, int[] before) {
         ItemStack out = ItemStack.EMPTY;
         int size = player.getInventory().getContainerSize();
         for (int i = 0; i < size; i++) {
@@ -938,11 +942,11 @@ final class RtsStorageTransfers {
         return out;
     }
 
-    static ItemStack insertToHandlerPreferExisting(IItemHandler handler, ItemStack stack) {
+    public static ItemStack insertToHandlerPreferExisting(IItemHandler handler, ItemStack stack) {
         if (stack == null || stack.isEmpty()) {
             return ItemStack.EMPTY;
         }
-        ItemStack anySlotRemain = RtsLinkedStorageResolver.insertItemAnywhereIfSupported(handler, stack, false);
+        ItemStack anySlotRemain = RtsLinkedHandlerViews.insertItemAnywhereIfSupported(handler, stack, false);
         if (anySlotRemain != null) {
             return anySlotRemain;
         }
@@ -963,7 +967,7 @@ final class RtsStorageTransfers {
         return remain;
     }
 
-    static ItemStack storeToLinkedOnlyPreferExisting(List<IItemHandler> handlers, ItemStack stack) {
+    public static ItemStack storeToLinkedOnlyPreferExisting(List<IItemHandler> handlers, ItemStack stack) {
         ItemStack remain = stack.copy();
         for (IItemHandler handler : handlers) {
             if (remain.isEmpty()) {
@@ -974,14 +978,14 @@ final class RtsStorageTransfers {
         return remain;
     }
 
-    static void refundItem(IItemHandler handler, ServerPlayer player, ItemStack stack) {
+    public static void refundItem(IItemHandler handler, ServerPlayer player, ItemStack stack) {
         ItemStack remain = insertToHandler(handler, stack);
         if (!remain.isEmpty()) {
             player.drop(remain, false);
         }
     }
 
-    static void sendStorageOverflowHint(ServerPlayer player, String context, OverflowOutcome overflow) {
+    public static void sendStorageOverflowHint(ServerPlayer player, String context, OverflowOutcome overflow) {
         if (!overflow.hasOverflow()) {
             return;
         }
@@ -1035,17 +1039,5 @@ final class RtsStorageTransfers {
             return 0;
         }
         return Math.min(PLAYER_MAIN_INVENTORY_END_EXCLUSIVE, player.getInventory().getContainerSize());
-    }
-}
-
-record OverflowOutcome(int movedToInventory, int dropped) {
-    static final OverflowOutcome EMPTY = new OverflowOutcome(0, 0);
-
-    OverflowOutcome merge(OverflowOutcome other) {
-        return new OverflowOutcome(this.movedToInventory + other.movedToInventory, this.dropped + other.dropped);
-    }
-
-    boolean hasOverflow() {
-        return this.movedToInventory > 0 || this.dropped > 0;
     }
 }

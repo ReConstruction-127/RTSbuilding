@@ -1,4 +1,4 @@
-package com.rtsbuilding.rtsbuilding.server;
+package com.rtsbuilding.rtsbuilding.server.storage;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -16,6 +16,9 @@ import com.rtsbuilding.rtsbuilding.compat.ae2.RtsAe2Compat;
 import com.rtsbuilding.rtsbuilding.compat.bd.RtsBdCompat;
 import com.rtsbuilding.rtsbuilding.network.storage.RtsStorageSort;
 import com.rtsbuilding.rtsbuilding.network.storage.S2CRtsStoragePagePayload;
+import com.rtsbuilding.rtsbuilding.server.RtsStorageManager;
+import com.rtsbuilding.rtsbuilding.server.RtsStorageUiPayloads;
+import com.rtsbuilding.rtsbuilding.server.menu.RtsCraftTerminalMenu;
 import com.rtsbuilding.rtsbuilding.util.RtsCountUtil;
 import com.rtsbuilding.rtsbuilding.util.RtsPinyinSearch;
 
@@ -48,8 +51,8 @@ import net.neoforged.neoforge.items.IItemHandler;
  * must keep the same order and empty-string padding as the manager emitted
  * before this extraction.
  */
-final class RtsStoragePageBuilder {
-    static final int DEFAULT_PAGE_SIZE = 90;
+public final class RtsStoragePageBuilder {
+    public static final int DEFAULT_PAGE_SIZE = 90;
     private static final int MAX_PAGE_SIZE = 180;
     private static final int PLAYER_MAIN_INVENTORY_END_EXCLUSIVE = 36;
     private static final String CATEGORY_ALL = "all";
@@ -63,7 +66,7 @@ final class RtsStoragePageBuilder {
     private RtsStoragePageBuilder() {
     }
 
-    static PageResult build(
+    public static PageResult build(
             ServerPlayer player,
             RtsStorageSession session,
             int requestedPage,
@@ -334,7 +337,7 @@ final class RtsStoragePageBuilder {
                 funnelBufferCounts), safePage);
     }
 
-    static int sanitizePageSize(int pageSize) {
+    public static int sanitizePageSize(int pageSize) {
         return Math.max(1, Math.min(MAX_PAGE_SIZE, pageSize));
     }
 
@@ -376,7 +379,7 @@ final class RtsStoragePageBuilder {
      * Localized search ids are sanitized here so storage and craft search share
      * the same registry gate before matching client-side translated names.
      */
-    static Set<String> sanitizeLocalizedSearchMatches(List<String> localizedSearchMatches) {
+    public static Set<String> sanitizeLocalizedSearchMatches(List<String> localizedSearchMatches) {
         if (localizedSearchMatches == null || localizedSearchMatches.isEmpty()) {
             return Set.of();
         }
@@ -397,7 +400,7 @@ final class RtsStoragePageBuilder {
         return sanitized;
     }
 
-    static String normalizeCategory(String category) {
+    public static String normalizeCategory(String category) {
         if (category == null) {
             return CATEGORY_ALL;
         }
@@ -416,7 +419,7 @@ final class RtsStoragePageBuilder {
      * Creative-tab indexing belongs to page building because it only affects
      * storage browser category chips, not actual inventory contents.
      */
-    static void warmCreativeTabCacheMode(ServerLevel level, boolean operatorTabs) {
+    public static void warmCreativeTabCacheMode(ServerLevel level, boolean operatorTabs) {
         if (isCreativeTabCacheWarm(operatorTabs)) {
             return;
         }
@@ -424,7 +427,7 @@ final class RtsStoragePageBuilder {
         setCreativeTabCacheWarm(operatorTabs);
     }
 
-    static void clearCreativeTabCacheState() {
+    public static void clearCreativeTabCacheState() {
         ITEM_CREATIVE_TAB_CACHE.clear();
         BROKEN_CREATIVE_TAB_CACHE.clear();
         creativeTabCacheWarmNormal = false;
@@ -436,7 +439,7 @@ final class RtsStoragePageBuilder {
      * "effectively infinite" values are shown consistently wherever the manager
      * summarizes visible storage.
      */
-    static long getHandlerReportedCount(IItemHandler handler, int slot, ItemStack stack) {
+    public static long getHandlerReportedCount(IItemHandler handler, int slot, ItemStack stack) {
         return sanitizeCount(RtsAe2Compat.getReportedCount(handler, slot, stack));
     }
 
@@ -459,7 +462,7 @@ final class RtsStoragePageBuilder {
         return RtsCountUtil.sanitizeCount(value);
     }
 
-    static long internalFluidCapacityMb(ServerPlayer player) {
+    public static long internalFluidCapacityMb(ServerPlayer player) {
         return RtsStorageFluids.internalFluidCapacityMb(player);
     }
 
@@ -648,7 +651,7 @@ final class RtsStoragePageBuilder {
      * other manager paths reuse it so picking from the visible grid matches what
      * the player can actually extract.
      */
-    static boolean shouldIncludePlayerMainInventoryInStorageView(ServerPlayer player, RtsStorageSession session) {
+    public static boolean shouldIncludePlayerMainInventoryInStorageView(ServerPlayer player, RtsStorageSession session) {
         if (player == null || player.containerMenu instanceof RtsCraftTerminalMenu) {
             return false;
         }
@@ -701,14 +704,14 @@ final class RtsStoragePageBuilder {
      * Shared main-inventory slot bounds keep extraction fallback aligned with
      * the rows included by the storage browser page.
      */
-    static int getPlayerMainInventoryStart(ServerPlayer player) {
+    public static int getPlayerMainInventoryStart(ServerPlayer player) {
         if (player == null) {
             return 0;
         }
         return 0;
     }
 
-    static int getPlayerMainInventoryEndExclusive(ServerPlayer player) {
+    public static int getPlayerMainInventoryEndExclusive(ServerPlayer player) {
         if (player == null) {
             return 0;
         }
@@ -719,7 +722,7 @@ final class RtsStoragePageBuilder {
      * Craft availability reuses these totals so the fallback player-inventory
      * rows visible in the browser match craft-panel availability checks.
      */
-    static void accumulatePlayerMainInventoryCounts(ServerPlayer player, Map<String, Long> counts,
+    public static void accumulatePlayerMainInventoryCounts(ServerPlayer player, Map<String, Long> counts,
             Map<String, Long> namespaceTotals) {
         if (player == null || counts == null || namespaceTotals == null) {
             return;
@@ -821,7 +824,7 @@ final class RtsStoragePageBuilder {
         return ordered;
     }
 
-    record PageResult(S2CRtsStoragePagePayload payload, int safePage) {
+    public record PageResult(S2CRtsStoragePagePayload payload, int safePage) {
     }
 
     private record Entry(ItemStack stack, String itemId, String namespace, String path, String label, long count) {
