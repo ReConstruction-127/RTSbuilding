@@ -199,6 +199,36 @@ public final class ClientRtsController {
     private int ultimineProgressProcessed = -1;
     /** Ultimine overall progress: total number of target blocks. */
     private int ultimineProgressTotal = 0;
+
+    // =========================================================================
+    //  范围挖掘（Area Mine）状态
+    //  三阶段选区流程：NONE → NEED_SECOND → NEED_HEIGHT → 确认发送
+    // =========================================================================
+
+    /** 范围挖掘阶段：未激活 */
+    public static final int AREA_MINE_PHASE_NONE = 0;
+    /** 范围挖掘阶段：等待第二次点击确定底面矩形 */
+    public static final int AREA_MINE_PHASE_NEED_SECOND = 1;
+    /** 范围挖掘阶段：等待滚轮调整高度后确认 */
+    public static final int AREA_MINE_PHASE_NEED_HEIGHT = 2;
+    /** 范围挖掘每个维度的最大方块数（12 = 单个方向最多延伸 11 格） */
+    public static final int AREA_MINE_MAX_SIZE = 12;
+
+    /** 当前范围挖掘阶段 */
+    private int areaMinePhase = AREA_MINE_PHASE_NONE;
+    /** 锚点 A：第一次点击的位置（也是 Y 方向的基准面） */
+    private BlockPos areaMinePointA;
+    /** 锚点 B：第二次点击的位置，与 A 共同确定底面矩形范围 */
+    private BlockPos areaMinePointB;
+    /** 高度偏移量：基于 A 点 Y 坐标上下延伸（滚轮调节，正=向上，负=向下） */
+    private int areaMineHeightOffset;
+
+    /**
+     * 范围挖掘的三维边界计算结果。
+     * 客户端预览和服务端确认共用此结构，消除重复计算。
+     */
+    public record AreaMineBounds(int minX, int maxX, int minY, int maxY, int minZ, int maxZ) {
+    }
     private BuildShape buildShape = BuildShape.BLOCK;
     private boolean pendingCraftTerminalOpen;
     private int pendingCraftTerminalOpenTicks;
@@ -2496,6 +2526,159 @@ public final class ClientRtsController {
 
     public void continueMining(int toolSlot) {
         // Mining progress is maintained server-side after START; no per-tick packet needed.
+    }
+
+    // =========================================================================
+    //  范围挖掘（Area Mine）— 操作方法
+    // =========================================================================
+
+    // ---------- 状态查询 ----------
+
+    /** 返回当前范围挖掘阶段（NONE / NEED_SECOND / NEED_HEIGHT） */
+    public int getAreaMinePhase() {
+        return this.areaMinePhase;
+    }
+
+    /** 返回锚点 A（第一次点击位置），可能为 null */
+    public BlockPos getAreaMinePointA() {
+        return this.areaMinePointA;
+    }
+
+    /** 返回锚点 B（第二次点击位置），可能为 null */
+    public BlockPos getAreaMinePointB() {
+        return this.areaMinePointB;
+    }
+
+    /** 返回高度偏移量（基于 A 点 Y 坐标的上下偏移） */
+    public int getAreaMineHeightOffset() {
+        return this.areaMineHeightOffset;
+    }
+
+    // ---------- 边界计算（消除客户端预览/确认的重复逻辑） ----------
+
+    /**
+     * 根据两个对角点和高度偏移，计算范围挖掘的完整三维边界。
+     * <p>以 pointA 为锚点：
+     * <ul>
+     *   <li>X/Z 方向：以 pointB 决定延伸方向，差值 clamp 到 [0, AREA_MINE_MAX_SIZE-1]</li>
+     *   <li>Y 方向：baseY + heightOffset，再 clamp 到 [baseY-(MAX-1), baseY+(MAX-1)]</li>
+     * </ul>
+     * 客户端预览渲染和服务端确认发送均使用此方法，确保计算一致。
+     *
+     * @param pointA       锚点 A
+     * @param pointB       对角点 B
+     * @param heightOffset 高度偏移（正=向上延伸，负=向下延伸，0=仅单层底面）
+     * @return 裁剪后的边界结果
+     */
+    public static AreaMineBounds computeAreaMineBounds(BlockPos pointA, BlockPos pointB, int heightOffset) {
+        // X 方向：从 A 向 B 延伸，不超过 MAX_SIZE
+        int dx = Math.min(Math.abs(pointB.getX() - pointA.getX()), AREA_MINE_MAX_SIZE - 1);
+        int minX = pointB.getX() >= pointA.getX() ? pointA.getX() : pointA.getX() - dx;
+        int maxX = pointB.getX() >= pointA.getX() ? pointA.getX() + dx : pointA.getX();
+
+        // Z 方向：同 X
+        int dz = Math.min(Math.abs(pointB.getZ() - pointA.getZ()), AREA_MINE_MAX_SIZE - 1);
+        int minZ = pointB.getZ() >= pointA.getZ() ? pointA.getZ() : pointA.getZ() - dz;
+        int maxZ = pointB.getZ() >= pointA.getZ() ? pointA.getZ() + dz : pointA.getZ();
+
+        // Y 方向：以 A 点 Y 为基准，应用高度偏移后 clamp
+        int baseY = pointA.getY();
+        int minY = Math.max(baseY - (AREA_MINE_MAX_SIZE - 1), baseY + Math.min(0, heightOffset));
+        int maxY = Math.min(baseY + (AREA_MINE_MAX_SIZE - 1), baseY + Math.max(0, heightOffset));
+
+        return new AreaMineBounds(minX, maxX, minY, maxY, minZ, maxZ);
+    }
+
+    // ---------- 高度设置 ----------
+
+    /**
+     * 设置高度偏移量，自动 clamp 到 [-(MAX_SIZE-1), MAX_SIZE-1]。
+     * 正数表示向上延伸，负数表示向下延伸。
+     */
+    public void setAreaMineHeightOffset(int offset) {
+        this.areaMineHeightOffset = Math.max(-(AREA_MINE_MAX_SIZE - 1), Math.min(AREA_MINE_MAX_SIZE - 1, offset));
+    }
+
+    /**
+     * 按增量调整高度偏移（正=增加/上移，负=减少/下移）。
+     * 在 NEED_HEIGHT 阶段由鼠标滚轮触发。
+     */
+    public void adjustAreaMineHeightOffset(int delta) {
+        setAreaMineHeightOffset(this.areaMineHeightOffset + delta);
+    }
+
+    // ---------- 选区管理 ----------
+
+    /**
+     * 设置锚点 A（第一次左键点击）。
+     * <ul>
+     *   <li>进入 NEED_SECOND 阶段，等待第二次点击确定底面矩形</li>
+     *   <li>清除之前的 B 点和高度偏移</li>
+     *   <li>更新挖掘渲染位置</li>
+     * </ul>
+     */
+    public void setAreaMinePointA(BlockPos pos) {
+        this.areaMinePointA = pos == null ? null : pos.immutable();
+        this.areaMinePointB = null;
+        this.areaMineHeightOffset = 0;
+        this.areaMinePhase = pos == null ? AREA_MINE_PHASE_NONE : AREA_MINE_PHASE_NEED_SECOND;
+        this.mineRenderPos = this.areaMinePointA;
+        this.mineRenderStage = 0;
+    }
+
+    /**
+     * 设置锚点 B（第二次左键点击）。
+     * <ul>
+     *   <li>进入 NEED_HEIGHT 阶段，等待滚轮调整高度后确认</li>
+     *   <li>清除之前的高度偏移</li>
+     *   <li>更新挖掘渲染位置</li>
+     * </ul>
+     */
+    public void setAreaMinePointB(BlockPos pos) {
+        this.areaMinePointB = pos == null ? null : pos.immutable();
+        this.areaMineHeightOffset = 0;
+        this.areaMinePhase = pos == null ? AREA_MINE_PHASE_NONE : AREA_MINE_PHASE_NEED_HEIGHT;
+        this.mineRenderPos = this.areaMinePointB;
+        this.mineRenderStage = 0;
+    }
+
+    /** 清除当前范围挖掘会话，重置所有选区状态。 */
+    public void clearAreaMineSession() {
+        this.areaMinePhase = AREA_MINE_PHASE_NONE;
+        this.areaMinePointA = null;
+        this.areaMinePointB = null;
+        this.areaMineHeightOffset = 0;
+        this.mineRenderStage = -1;
+    }
+
+    /**
+     * 确认并发起范围挖掘（第三次左键点击触发）。
+     * 使用共享边界计算方法得到最终范围后发包，然后清空会话。
+     */
+    public void confirmAreaMine(int toolSlot) {
+        if (this.areaMinePointA == null || this.areaMinePointB == null) {
+            return;
+        }
+        // 用共享边界计算方法得到最终范围
+        AreaMineBounds bounds = computeAreaMineBounds(
+                this.areaMinePointA, this.areaMinePointB, this.areaMineHeightOffset);
+
+        // 设置当前挖掘目标为锚点 A（用于渲染破坏进度）
+        this.activeMinePos = this.areaMinePointA.immutable();
+        this.activeMineFace = Direction.UP.get3DDataValue();
+        this.activeMineToolSlot = Mth.clamp(toolSlot, 0, 8);
+        this.mineRenderPos = this.activeMinePos;
+        this.mineRenderStage = 0;
+
+        // 发送范围挖掘网络包到服务端
+        RtsClientPacketGateway.sendAreaMine(
+                bounds.minX(), bounds.maxX(), bounds.minY(), bounds.maxY(),
+                bounds.minZ(), bounds.maxZ(),
+                this.activeMineToolSlot,
+                selectedMiningToolItemId(),
+                selectedMiningToolPrototype());
+
+        clearAreaMineSession();
     }
 
     public void abortMining(int toolSlot) {

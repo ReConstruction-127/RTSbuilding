@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Locale;
 
 import com.rtsbuilding.rtsbuilding.common.BuilderMode;
+import com.rtsbuilding.rtsbuilding.network.builder.C2SRtsAreaMinePayload;
 import com.rtsbuilding.rtsbuilding.network.builder.C2SRtsBreakPayload;
 import com.rtsbuilding.rtsbuilding.network.progression.C2SRtsBeginHomeSelectionPayload;
 import com.rtsbuilding.rtsbuilding.network.camera.C2SRtsCameraMovePayload;
@@ -472,6 +473,15 @@ public final class RtsClientPacketGateway {
                 pos,
                 (byte) face.get3DDataValue(),
                 allowAdjacentFallback));
+    }
+
+    public static void sendAreaMine(int minX, int maxX, int minY, int maxY, int minZ, int maxZ,
+            int toolSlot, String toolItemId, ItemStack toolPrototype) {
+        PacketDistributor.sendToServer(new C2SRtsAreaMinePayload(
+                minX, maxX, minY, maxY, minZ, maxZ,
+                (byte) Mth.clamp(toolSlot, 0, 8),
+                toolItemId == null ? "" : toolItemId,
+                toolPrototype == null ? ItemStack.EMPTY : toolPrototype));
     }
 
     public static void sendMineStart(BlockPos pos, int face, int toolSlot, String toolItemId, ItemStack toolPrototype,

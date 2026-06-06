@@ -74,6 +74,8 @@ public final class RtsStorageMining {
 
     /** Maximum number of blocks an ultimine batch may collect. */
     private static final int ULTIMINE_MAX_BLOCKS = 256;
+    /** Max blocks per dimension for area mine (X, Y, Z). */
+    private static final int AREA_MINE_MAX_SIZE = 12;
 
     /** How many ultimine targets are processed in a single tick. */
     private static final int ULTIMINE_BLOCKS_PER_TICK = 8;
@@ -247,6 +249,110 @@ public final class RtsStorageMining {
         session.miningToolSlot = slot;
         sendUltimineProgress(player, 0, targets.size());
         beginRemoteMining(player, session, targets.peekFirst(), face, slot);
+    }
+
+    /**
+     * Starts an area-mine operation: breaks all breakable blocks within the
+     * specified 3D volume bounds.
+     *
+     * <p>Scans every position inside the bounding box, collects valid targets
+     * (non-air, breakable, within world-access range), and feeds them into
+     * the existing ultimine batch processing system so that progress, tool
+     * leases, drop absorption, and storage-page refreshes work identically.</p>
+     *
+     * <p><b>流程：</b>
+     * <ol>
+     *   <li>检查 ULTIMINE 特性权限和会话状态</li>
+     *   <li>对每个维度 clamp 到 {@link #AREA_MINE_MAX_SIZE}</li>
+     *   <li>三重循环扫描立方体范围内的所有方块</li>
+     *   <li>过滤空气、不可破坏方块和超出世界访问范围的方块</li>
+     *   <li>创造模式直接全部破坏；生存模式借用工具并启动远程挖掘</li>
+     * </ol>
+     *
+     * @param player          the server player
+     * @param session         the player's storage session
+     * @param minX, maxX      inclusive X-axis bounds
+     * @param minY, maxY      inclusive Y-axis bounds
+     * @param minZ, maxZ      inclusive Z-axis bounds
+     * @param toolSlot        selected hotbar slot
+     * @param toolItemId      resource-location string of the tool
+     * @param toolPrototype   prototype stack for inventory matching
+     */
+    public static void areaMine(ServerPlayer player, RtsStorageSession session,
+            int minX, int maxX, int minY, int maxY, int minZ, int maxZ,
+            byte toolSlot, String toolItemId, ItemStack toolPrototype) {
+        // --- 1. 前置检查 ---
+        if (!RtsProgressionManager.canUse(player, RtsFeature.ULTIMINE)) {
+            return;
+        }
+        if (session == null) {
+            return;
+        }
+        RtsLinkedStorageResolver.sanitizeSessionDimension(player, session);
+
+        int slot = clampHotbarSlot(toolSlot);
+        if (RtsProgressionManager.getUltimineLimit(player) <= 0) {
+            return;
+        }
+
+        // --- 2. 边界裁剪：确保每个维度不超过 AREA_MINE_MAX_SIZE（客户端也应执行同款 clamp） ---
+        int clampedMinX = minX;
+        int clampedMaxX = Math.min(clampedMinX + AREA_MINE_MAX_SIZE - 1, maxX);
+        int clampedMinZ = minZ;
+        int clampedMaxZ = Math.min(clampedMinZ + AREA_MINE_MAX_SIZE - 1, maxZ);
+        int clampedMinY = minY;
+        int clampedMaxY = Math.min(clampedMinY + AREA_MINE_MAX_SIZE - 1, maxY);
+
+        // --- 3. 三重循环扫描立方体范围（最大 12×12×12 = 1728 格），独立于连锁挖掘数量限制 ---
+        //     每个方块依次检查：世界访问权限 → 非空气 → 可破坏
+        ServerLevel level = player.serverLevel();
+        Deque<BlockPos> targets = new ArrayDeque<>();
+        for (int y = clampedMinY; y <= clampedMaxY; y++) {
+            for (int x = clampedMinX; x <= clampedMaxX; x++) {
+                for (int z = clampedMinZ; z <= clampedMaxZ; z++) {
+                    BlockPos pos = new BlockPos(x, y, z);
+                    if (!RtsLinkedStorageResolver.canAccessWorldTarget(player, pos)) {
+                        continue;
+                    }
+                    BlockState state = level.getBlockState(pos);
+                    if (state.isAir() || state.getDestroySpeed(level, pos) < 0.0F) {
+                        continue;
+                    }
+                    targets.add(pos.immutable());
+                }
+            }
+        }
+
+        // --- 4. 处理结果 ---
+        if (targets.isEmpty()) {
+            // 无可破坏方块 → 停止当前挖掘
+            stopActiveMining(player, session);
+            return;
+        }
+
+        if (player.isCreative()) {
+            // 创造模式：瞬间全部破坏
+            stopActiveMining(player, session);
+            breakCreativeUltimineTargets(player, session, targets, slot);
+            RtsStorageManager.requestPage(player, session.page, session.search, session.category, session.sort, session.ascending);
+            return;
+        }
+
+        // 生存模式：借用工具，设置 Ultimine 目标队列，逐步远程挖掘
+        stopActiveMining(player, session);
+        RtsToolLease toolLease = borrowMiningTool(player, session, toolItemId, toolPrototype, slot);
+
+        session.miningToolLease = toolLease;
+        session.ultimineTargets.clear();
+        session.ultimineTargets.addAll(targets);
+        session.ultimineProgressPos = targets.peekFirst();
+        session.ultimineTotalTargets = targets.size();
+        session.ultimineProcessedTargets = 0;
+        session.ultimineAbsorbedDrops = false;
+        session.miningFace = Direction.DOWN;
+        session.miningToolSlot = slot;
+        sendUltimineProgress(player, 0, targets.size());
+        beginRemoteMining(player, session, targets.peekFirst(), null, slot);
     }
 
     /**

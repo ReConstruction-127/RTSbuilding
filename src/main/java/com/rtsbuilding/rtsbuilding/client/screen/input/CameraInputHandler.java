@@ -5,8 +5,10 @@ import com.rtsbuilding.rtsbuilding.blueprint.client.BlueprintPanel;
 import com.rtsbuilding.rtsbuilding.client.screen.BuilderScreen;
 import com.rtsbuilding.rtsbuilding.client.bootstrap.ClientKeyMappings;
 import com.rtsbuilding.rtsbuilding.client.controller.ClientRtsController;
+import com.rtsbuilding.rtsbuilding.client.screen.ultimine.UltimineMode;
 import com.rtsbuilding.rtsbuilding.common.BuilderMode;
 import net.minecraft.client.Minecraft;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
@@ -332,16 +334,35 @@ public final class CameraInputHandler {
                 || this.controller.getMode() == BuilderMode.FUNNEL) {
             return false;
         }
-        BlockHitResult hit = screen.pickBlockHit();
-        if (hit == null) {
-            return false;
-        }
-        if (screen.isUltimineOpen()) {
-            this.controller.startUltimine(hit.getBlockPos(), hit.getDirection().get3DDataValue(), screen.getSelectedToolSlot(), screen.getUltimineLimit(), (byte) screen.getUltimineMode().ordinal());
-            screen.setUltimineLastSentLimit(screen.getUltimineLimit());
+        if (screen.isUltimineOpen() && screen.getUltimineMode() == UltimineMode.AREA
+                && this.controller.getAreaMinePhase() == ClientRtsController.AREA_MINE_PHASE_NEED_HEIGHT) {
+            // 第三次点击：确认范围挖掘，直接发包执行，不需要再求 BlockHit
+            this.controller.confirmAreaMine(screen.getSelectedToolSlot());
         } else {
-            this.controller.startMining(hit.getBlockPos(), hit.getDirection().get3DDataValue(), screen.getSelectedToolSlot());
-            screen.setUltimineLastSentLimit(1);
+            BlockHitResult hit = screen.pickBlockHit();
+            if (hit == null) {
+                return false;
+            }
+            if (screen.isUltimineOpen() && screen.getUltimineMode() == UltimineMode.AREA) {
+                // 三击选点模式（类似快速建造的 BOX 模式）：
+                // 第 1 击 → setPointA (进入 NEED_SECOND)
+                // 第 2 击 → setPointB (进入 NEED_HEIGHT)
+                // 第 3 击 → 上面 confirmAreaMine (由 phase==NEED_HEIGHT 分支处理)
+                int phase = this.controller.getAreaMinePhase();
+                if (phase == ClientRtsController.AREA_MINE_PHASE_NONE) {
+                    // First click: set point A
+                    this.controller.setAreaMinePointA(hit.getBlockPos().immutable());
+                } else if (phase == ClientRtsController.AREA_MINE_PHASE_NEED_SECOND) {
+                    // Second click: set point B (defines base rectangle), enter height adjustment phase
+                    this.controller.setAreaMinePointB(hit.getBlockPos().immutable());
+                }
+            } else if (screen.isUltimineOpen()) {
+                this.controller.startUltimine(hit.getBlockPos(), hit.getDirection().get3DDataValue(), screen.getSelectedToolSlot(), screen.getUltimineLimit(), (byte) screen.getUltimineMode().ordinal());
+                screen.setUltimineLastSentLimit(screen.getUltimineLimit());
+            } else if (!screen.isUltimineOpen()) {
+                this.controller.startMining(hit.getBlockPos(), hit.getDirection().get3DDataValue(), screen.getSelectedToolSlot());
+                screen.setUltimineLastSentLimit(1);
+            }
         }
         this.leftMiningActive = true;
         this.activeMiningMouseButton = keyboard ? -1 : mouseButton;

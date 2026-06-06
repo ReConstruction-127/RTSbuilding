@@ -204,4 +204,19 @@ public final class RtsBuilderNetworkHandlers {
             }
         });
     }
+
+    public static void handleAreaMine(C2SRtsAreaMinePayload payload, IPayloadContext context) {
+        context.enqueueWork(() -> {
+            if (context.player() instanceof ServerPlayer serverPlayer) {
+                RtsStorageManager.areaMine(
+                        serverPlayer,
+                        payload.minX(), payload.maxX(),
+                        payload.minY(), payload.maxY(),
+                        payload.minZ(), payload.maxZ(),
+                        payload.toolSlot(),
+                        payload.toolItemId(),
+                        payload.toolPrototype());
+            }
+        });
+    }
 }

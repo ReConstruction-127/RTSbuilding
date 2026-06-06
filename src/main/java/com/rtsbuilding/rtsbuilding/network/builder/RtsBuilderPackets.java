@@ -70,6 +70,11 @@ public final class RtsBuilderPackets {
                 C2SRtsUltiminePayload.STREAM_CODEC,
                 RtsBuilderNetworkHandlers::handleUltimine);
 
+        registrar.playToServer(
+                C2SRtsAreaMinePayload.TYPE,
+                C2SRtsAreaMinePayload.STREAM_CODEC,
+                RtsBuilderNetworkHandlers::handleAreaMine);
+
         registrar.playToClient(
                 S2CRtsMineProgressPayload.TYPE,
                 S2CRtsMineProgressPayload.STREAM_CODEC,

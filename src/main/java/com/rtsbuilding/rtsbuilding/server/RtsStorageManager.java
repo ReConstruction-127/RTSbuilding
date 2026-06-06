@@ -1151,6 +1151,18 @@ public final class RtsStorageManager {
                 mode);
     }
 
+    public static void areaMine(ServerPlayer player,
+            int minX, int maxX, int minY, int maxY, int minZ, int maxZ,
+            byte toolSlot, String toolItemId, ItemStack toolPrototype) {
+        RtsStorageMining.areaMine(
+                player,
+                SESSIONS.get(player.getUUID()),
+                minX, maxX, minY, maxY, minZ, maxZ,
+                toolSlot,
+                toolItemId,
+                toolPrototype);
+    }
+
     private static void tickActiveMining(ServerPlayer player, RtsStorageSession session) {
         RtsStorageMining.tickActiveMining(player, session);
     }

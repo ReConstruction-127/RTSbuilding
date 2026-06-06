@@ -53,7 +53,10 @@ import net.minecraft.world.phys.Vec3;
 import net.neoforged.fml.ModList;
 import org.lwjgl.glfw.GLFW;
 
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import static com.rtsbuilding.rtsbuilding.client.screen.BuilderScreenConstants.*;
 /**
@@ -320,6 +323,7 @@ public final class BuilderScreen extends Screen {
         closeInteractionWheel();
         closeShapeWheel();
         this.shapeController.clearShapeBuildSession();
+        this.controller.clearAreaMineSession();
         persistUiState();
         this.pendingGuiBindSlot = -1;
         this.funnelHotkeyHeld = false;
@@ -461,6 +465,12 @@ public final class BuilderScreen extends Screen {
         }
         if (this.guidePanel.isOpen() || this.gearMenuPanel.isOpen()) {
             return true;
+        }
+        // 范围破坏选区中，在 world area 内仅放行 left-click（由 startMiningAt 处理）
+        if (this.controller.getAreaMinePhase() != ClientRtsController.AREA_MINE_PHASE_NONE) {
+            if (isWorldArea(mouseX, mouseY) && !CameraInputHandler.isBreakActionMouse(button)) {
+                return true;
+            }
         }
         if (button == GLFW.GLFW_MOUSE_BUTTON_LEFT) {
             boolean insideBottomPanel = isInsideBottomPanel(mouseX, mouseY);
@@ -635,6 +645,11 @@ public final class BuilderScreen extends Screen {
             return true;
         }
         if (this.guidePanel.isOpen() || this.gearMenuPanel.isOpen()) {
+            return true;
+        }
+
+        // 范围挖掘选区中，阻止所有鼠标拖拽操作
+        if (this.controller.getAreaMinePhase() != ClientRtsController.AREA_MINE_PHASE_NONE) {
             return true;
         }
 
@@ -897,6 +912,17 @@ public final class BuilderScreen extends Screen {
         if (isInsideBottomPanel(mouseX, mouseY)) {
             return this.bottomPanel.handleMouseScrolled(mouseX, mouseY, scrollY);
         }
+        // 范围破坏选区中：NEED_HEIGHT阶段滚轮调整高度，其他阶段阻止
+        if (this.controller.getAreaMinePhase() != ClientRtsController.AREA_MINE_PHASE_NONE) {
+            if (this.controller.getAreaMinePhase() == ClientRtsController.AREA_MINE_PHASE_NEED_HEIGHT) {
+                int delta = scrollY > 0.0D ? 1 : -1;
+                if (isAltDown()) {
+                    delta *= 4;
+                }
+                this.controller.adjustAreaMineHeightOffset(delta);
+            }
+            return true;
+        }
         if (!isSearchFocused() && this.shapeController.handleShapeHeightMouseScrolled(scrollY)) {
             return true;
         }
@@ -953,6 +979,12 @@ public final class BuilderScreen extends Screen {
         }
         if (this.guidePanel.isOpen() || this.gearMenuPanel.isOpen()) {
             return true;
+        }
+        // 范围破坏选区中，阻止除挖矿键之外的其他世界交互键盘操作
+        if (this.controller.getAreaMinePhase() != ClientRtsController.AREA_MINE_PHASE_NONE) {
+            if (!ClientKeyMappings.ACTION_BREAK.matches(keyCode, scanCode)) {
+                return true;
+            }
         }
         if (this.pendingGuiBindSlot >= 0 && keyCode == GLFW.GLFW_KEY_ESCAPE) {
             this.pendingGuiBindSlot = -1;
@@ -1450,6 +1482,19 @@ public final class BuilderScreen extends Screen {
     /** Returns the current ultimine mode (CHAIN or AREA). */
     public UltimineMode getUltimineMode() {
         return this.ultiminePanel.getMode();
+    }
+    /** Returns true if currently in area mine height selection phase (NEED_HEIGHT). */
+    public boolean isAreaMineHeightPreview() {
+        if (!isUltimineOpen() || getUltimineMode() != UltimineMode.AREA) {
+            return false;
+        }
+        int phase = this.controller.getAreaMinePhase();
+        return phase == ClientRtsController.AREA_MINE_PHASE_NEED_SECOND
+                || phase == ClientRtsController.AREA_MINE_PHASE_NEED_HEIGHT;
+    }
+    /** Sets the current ultimine mode. */
+    public void setUltimineMode(UltimineMode mode) {
+        this.ultiminePanel.setMode(mode);
     }
     /** Sets the last sent ultimine limit value (to avoid redundant network packets). */
     public void setUltimineLastSentLimit(int limit) {
@@ -2013,6 +2058,43 @@ public final class BuilderScreen extends Screen {
         boolean creative = this.minecraft.player != null && this.minecraft.player.isCreative();
         int limit = this.ultiminePanel.getLimit();
         UltimineMode mode = this.ultiminePanel.getMode();
+        if (mode == UltimineMode.AREA) {
+            BlockPos pointA = this.controller.getAreaMinePointA();
+            if (pointA == null) {
+                return List.of();
+            }
+            int phase = this.controller.getAreaMinePhase();
+            BlockPos pointB = this.controller.getAreaMinePointB();
+            if (phase == ClientRtsController.AREA_MINE_PHASE_NEED_SECOND || pointB == null) {
+                // Phase 1: show 2D floor rectangle from pointA to cursor cursor (heightOffset=0)
+                BlockHitResult cursorHit = this.cursorPicker.pickBlockHit();
+                BlockPos cursorPos = cursorHit != null ? cursorHit.getBlockPos() : seed;
+                if (cursorPos != null && pointA != null && !cursorPos.equals(pointA)) {
+                    // 使用共享边界计算方法，heightOffset=0 表示仅底面单层
+                    ClientRtsController.AreaMineBounds bounds = ClientRtsController.computeAreaMineBounds(pointA, cursorPos, 0);
+                    Set<BlockPos> targets = new HashSet<>();
+                    ShapeGeometryUtil.addBoxTargets(
+                            targets,
+                            new BlockPos(bounds.minX(), pointA.getY(), bounds.minZ()),
+                            new BlockPos(bounds.maxX(), pointA.getY(), bounds.maxZ()),
+                            0,  // 单层底面
+                            ShapeBuildTypes.ShapeFillMode.FILL);
+                    return new ArrayList<>(targets);
+                }
+                return List.of(cursorPos != null ? cursorPos : seed);
+            }
+            // Phase NEED_HEIGHT: show the full 3D volume with height offset
+            ClientRtsController.AreaMineBounds bounds = ClientRtsController.computeAreaMineBounds(
+                    pointA, pointB, this.controller.getAreaMineHeightOffset());
+            Set<BlockPos> targets = new HashSet<>();
+            ShapeGeometryUtil.addBoxTargets(
+                    targets,
+                    new BlockPos(bounds.minX(), bounds.minY(), bounds.minZ()),
+                    new BlockPos(bounds.maxX(), bounds.maxY(), bounds.maxZ()),
+                    bounds.maxY() - bounds.minY(),
+                    ShapeBuildTypes.ShapeFillMode.FILL);
+            return new ArrayList<>(targets);
+        }
         return RtsUltimineCollector.collect(
                 this.minecraft.level,
                 seed,
@@ -2020,9 +2102,6 @@ public final class BuilderScreen extends Screen {
                 (pos, state, originalState) -> {
                     if (state.isAir() || (!creative && state.getDestroySpeed(this.minecraft.level, pos) < 0.0F)) {
                         return false;
-                    }
-                    if (mode == UltimineMode.AREA) {
-                        return true;
                     }
                     return state.getBlock() == originalState.getBlock();
                 });
