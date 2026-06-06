@@ -1569,6 +1569,10 @@ public final class BuilderScreen extends Screen {
     public void adjustRtsGuiScale(double delta) {
         this.uiStateManager.adjustRtsGuiScale(delta);
     }
+    /** Returns the current fixed RTS GUI scale value (e.g. 2.0 for 2x). */
+    public double getRtsGuiScale() {
+        return this.uiStateManager.fixedRtsGuiScale();
+    }
     /** Returns the current RTS GUI scale as a human-readable label (e.g. "1.0x", "1.5x"). */
     public String rtsGuiScaleLabel() {
         return this.uiStateManager.rtsGuiScaleLabel();

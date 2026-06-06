@@ -3,6 +3,7 @@ package com.rtsbuilding.rtsbuilding.client.screen.input;
 import com.mojang.blaze3d.platform.InputConstants;
 import com.rtsbuilding.rtsbuilding.blueprint.client.BlueprintPanel;
 import com.rtsbuilding.rtsbuilding.client.screen.BuilderScreen;
+import com.rtsbuilding.rtsbuilding.client.screen.interaction.InteractionTypes;
 import com.rtsbuilding.rtsbuilding.client.bootstrap.ClientKeyMappings;
 import com.rtsbuilding.rtsbuilding.client.controller.ClientRtsController;
 import com.rtsbuilding.rtsbuilding.client.screen.ultimine.UltimineMode;
@@ -339,6 +340,11 @@ public final class CameraInputHandler {
             // 第三次点击：确认范围挖掘，直接发包执行，不需要再求 BlockHit
             this.controller.confirmAreaMine(screen.getSelectedToolSlot());
         } else {
+            // 如果指示框当前选中实体，阻止方块破坏
+            InteractionTypes.InteractionTarget lookTarget = screen.pickInteractionTarget(false);
+            if (lookTarget != null && lookTarget.isEntityTarget()) {
+                return false;
+            }
             BlockHitResult hit = screen.pickBlockHit();
             if (hit == null) {
                 return false;

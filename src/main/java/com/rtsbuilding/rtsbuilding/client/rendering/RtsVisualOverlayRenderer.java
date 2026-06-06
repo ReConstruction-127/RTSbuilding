@@ -77,6 +77,29 @@ public final class RtsVisualOverlayRenderer {
                     .createCompositeState(false));
 
     /**
+     * 自定义渲染类型：包围盒线框矩形（POSITION_COLOR + QUADS）
+     * 用于渲染选中目标的 12 条棱线完整包围盒，每条棱渲染为 2 个交叉矩形
+     * 代替 GL_LINES 的无限薄线条，从任意视角都能看到可见宽度的线条。
+     */
+    private static final RenderType BRACKET_QUADS = RenderType.create(
+            "rtsbuilding_bracket_quads",
+            DefaultVertexFormat.POSITION_COLOR,
+            VertexFormat.Mode.QUADS,
+            512,
+            false,
+            false,
+            RenderType.CompositeState.builder()
+                    .setShaderState(RenderStateShard.POSITION_COLOR_SHADER)
+                    .setTransparencyState(RenderStateShard.TRANSLUCENT_TRANSPARENCY)
+                    .setDepthTestState(RenderStateShard.LEQUAL_DEPTH_TEST)
+                    .setOutputState(RenderStateShard.MAIN_TARGET)
+                    .setWriteMaskState(RenderStateShard.COLOR_WRITE)
+                    .setCullState(RenderStateShard.NO_CULL)
+                    .createCompositeState(false));
+
+    private static final ByteBufferBuilder BRACKET_BACKING = new ByteBufferBuilder(BRACKET_QUADS.bufferSize());
+
+    /**
      * 自定义渲染类型：屏障边界（使用世界边界纹理）
      * 使用POSITION_TEX_COLOR格式，支持贴图渲染
      */
@@ -104,7 +127,6 @@ public final class RtsVisualOverlayRenderer {
     private static final ByteBufferBuilder CHUNK_LINE_BACKING = new ByteBufferBuilder(CHUNK_XRAY_LINES.bufferSize());
     private static final ByteBufferBuilder LINE_BACKING = new ByteBufferBuilder(RenderType.lines().bufferSize());
     private static final ByteBufferBuilder FILL_BACKING = new ByteBufferBuilder(RenderType.debugFilledBox().bufferSize());
-
     /**
      * 私有构造函数，防止实例化
      */
@@ -155,6 +177,7 @@ public final class RtsVisualOverlayRenderer {
             RenderType filledBox = RenderType.debugFilledBox();
             BufferBuilder lineBuffer = bufferFor(lines, LINE_BACKING);
             BufferBuilder fillBuffer = bufferFor(filledBox, FILL_BACKING);
+            BufferBuilder bracketBuffer = bufferFor(BRACKET_QUADS, BRACKET_BACKING);
 
             // 获取锚点和半径信息
             double ax = controller.getAnchorX();
@@ -174,8 +197,8 @@ public final class RtsVisualOverlayRenderer {
             // 3. 渲染已链接的储存方块高亮
             StorageRenderer.renderLinkedStorages(minecraft, controller, poseStack, lineBuffer);
 
-            // 4. 渲染鼠标悬停的交互目标（方块或实体）
-            InteractionTargetRenderer.renderHoveredInteractionTarget(minecraft, controller, poseStack, lineBuffer);
+            // 4. 渲染鼠标悬停的交互目标（方块或实体）——使用 LEQUAL深度测试 + polygon offset + 交叉矩形
+            InteractionTargetRenderer.renderHoveredInteractionTarget(minecraft, controller, poseStack, bracketBuffer);
 
             // 5. 渲染形状建造预览（快速建造模式）
             ShapeGhostRenderer.renderShapeGhostPreview(minecraft, poseStack, lineBuffer, fillBuffer);
@@ -189,6 +212,8 @@ public final class RtsVisualOverlayRenderer {
             // 提交所有渲染缓冲区
             drawBuiltBuffer(lines, lineBuffer);
             drawBuiltBuffer(filledBox, fillBuffer);
+            // 交互目标线框使用 LEQUAL深度测试 + polygon offset，保证可见的同时不穿透方块遮挡
+            drawBuiltBufferWithDepthOffset(BRACKET_QUADS, bracketBuffer);
         } finally {
             poseStack.popPose();
         }
@@ -215,6 +240,27 @@ public final class RtsVisualOverlayRenderer {
         MeshData meshData = buffer.build();
         if (meshData != null) {
             renderType.draw(meshData);
+        }
+    }
+
+    /**
+     * 绘制并释放缓冲区（LEQUAL深度测试 + polygon offset，避免远处 Z-fighting 的同时保留背面遮挡）
+     * <p>
+     * polygon offset 将线框片元的深度值向相机方向微偏，
+     * 使其对同一表面的方块通过深度测试（消除 Z-fighting），
+     * 但方块背面的线框因实际位置在方块后方仍被正确遮挡。
+     *
+     * @param renderType 渲染类型
+     * @param buffer 待绘制的缓冲区
+     */
+    private static void drawBuiltBufferWithDepthOffset(RenderType renderType, BufferBuilder buffer) {
+        MeshData meshData = buffer.build();
+        if (meshData != null) {
+            RenderSystem.enablePolygonOffset();
+            RenderSystem.polygonOffset(-1.0F, -1.0F);
+            renderType.draw(meshData);
+            RenderSystem.polygonOffset(0.0F, 0.0F);
+            RenderSystem.disablePolygonOffset();
         }
     }
 
