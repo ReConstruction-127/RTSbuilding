@@ -32,7 +32,6 @@ import com.rtsbuilding.rtsbuilding.client.util.RtsClientUiUtil;
 import com.rtsbuilding.rtsbuilding.common.BuilderMode;
 import com.rtsbuilding.rtsbuilding.common.RtsUltimineCollector;
 import com.rtsbuilding.rtsbuilding.compat.ae2.RtsAe2Compat;
-import com.rtsbuilding.rtsbuilding.network.storage.RtsStorageSort;
 import com.rtsbuilding.rtsbuilding.progression.RtsProgressionNodes;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -67,6 +66,10 @@ import static com.rtsbuilding.rtsbuilding.client.screen.BuilderScreenConstants.*
  * interaction wheel, shape-based building, blueprint placement, guide panels,
  * the gear/settings menu, and associated UI interactions.
  * <p>
+ * <b>Dispatch design:</b> This class acts as a central coordinator. All UI logic
+ * is delegated to dedicated sub-components. Lifecycle methods (render, mouseClicked,
+ * keyPressed, etc.) are thin dispatchers that route to the appropriate handler.
+ * <p>
  * The screen layout is divided into three main regions:
  * <ul>
  *   <li><b>Top Bar:</b> Mode switching, action buttons, shape selection, guide entry.</li>
@@ -78,16 +81,12 @@ import static com.rtsbuilding.rtsbuilding.client.screen.BuilderScreenConstants.*
  * This class interacts with game logic through {@link ClientRtsController}.
  * All actual building operations are delegated to the server. UI state is
  * persisted via {@link RtsClientUiStateStore}.
- * <p>
- * <b>Design notes:</b> This is the central screen class that manages all UI
- * interaction. To keep the code maintainable, layout constants are extracted
- * into {@link BuilderScreenConstants}, geometry calculations are delegated to
- * {@link ShapeGeometryUtil}, and shape/blueprint preview models are extracted
- * as standalone records.
  *
  * @see ClientRtsController
  * @see BuilderScreenConstants
  * @see ShapeGeometryUtil
+ * @see StorageLinkDetailHandler
+ * @see RtsScreenOverlayRenderer
  */
 public final class BuilderScreen extends Screen {
     /** The central controller that bridges the screen with game logic and server communication. */
@@ -126,6 +125,8 @@ public final class BuilderScreen extends Screen {
     private final RtsScreenOverlayRenderer overlayRenderer;
     /** Front-to-back input routing for movable RTS windows. */
     private final RtsFloatingWindowLayer floatingWindowLayer;
+    /** Handler for storage link detail action rendering and clicks. */
+    private final StorageLinkDetailHandler storageLinkDetailHandler;
     /** Whether the user is currently dragging the input sensitivity slider. */
     private boolean draggingInputSensitivity = false;
     /** Whether the funnel hotkey (quick-activate funnel mode) is currently held down. */
@@ -139,10 +140,6 @@ public final class BuilderScreen extends Screen {
     /** The actual render scale factor active during the current fixed-scale render pass. */
     private double activeRtsGuiRenderScale = 1.0D;
     /** Stable hover anchor above the left "RTS" label; keeps item tooltips from chasing the cursor. */
-    private static final int LEFT_TOOLTIP_X_OFFSET = 8;
-    private static final int LEFT_TOOLTIP_Y_OFFSET = 24;
-    private static final int LEFT_TOOLTIP_DETAIL_Y_OFFSET = 18;
-    private static final int STORAGE_LINK_DETAIL_ACTION_H = 16;
     /** Last recorded mouse X position, updated each render frame for input consistency. */
     private int lastMouseX = 0;
     /** Last recorded mouse Y position, updated each render frame for input consistency. */
@@ -181,6 +178,7 @@ public final class BuilderScreen extends Screen {
         this.shapeController.init(this, this.controller);
         this.cursorPicker.init(this, this.controller, this.shapeController);
         this.cameraInput.init(this, this.controller);
+        this.storageLinkDetailHandler = new StorageLinkDetailHandler(this, this.controller, this.topBarPanel, this.linkedStoragePanel);
     }
     /** Returns the Minecraft font renderer for use by sub-panels and utilities. */
     public Font font() {
@@ -254,7 +252,7 @@ public final class BuilderScreen extends Screen {
     public double getCurrentMouseY() {
         return this.lastMouseY;
     }
-    /** Returns whether the retired shape-selection wheel overlay is currently open. */
+    /** Whether the (retired) shape-selection wheel is currently open — always false. */
     public boolean isShapeWheelOpen() {
         return false;
     }
@@ -262,7 +260,8 @@ public final class BuilderScreen extends Screen {
     public boolean isInteractionWheelOpen() {
         return this.interactionWheelPanel.isOpen();
     }
-    /** Retained for old extracted callers; the Alt shape wheel is retired. */
+    /** @deprecated Retained only for binary compatibility; the Alt shape wheel is retired. */
+    @Deprecated
     public void handleShapeWheelAltRelease(double mouseX, double mouseY) {
     }
     /** Returns the storage search box (for filtering items in the storage grid). */
@@ -273,8 +272,8 @@ public final class BuilderScreen extends Screen {
     public EditBox getCraftSearchBox() {
         return this.craftSearchBox;
     }
-    @Override
     /** Initialises the screen: creates search boxes, applies persisted UI state, and requests craftables. */
+    @Override
     protected void init() {
         super.init();
         // 进入 RTS 缩放帧，使 applyStoredUiState 中的 clamp 使用虚拟坐标空间（而非 GUI 缩放后的宽度）
@@ -304,24 +303,25 @@ public final class BuilderScreen extends Screen {
         this.craftSearchBox.setResponder(value -> this.bottomPanel.craftSearchDraft = value == null ? "" : value);
         this.controller.requestCraftables();
     }
-    @Override
     /** Prevents the game from pausing when the RTS screen is open (since it is an overlay, not a menu). */
+    @Override
     public boolean isPauseScreen() {
         return false;
     }
-    @Override
     /** Pressing Escape closes this screen and returns to normal gameplay. */
+    @Override
     public boolean shouldCloseOnEsc() {
         return true;
     }
-    @Override
     /**
+     * Called when the screen is closed.
+     /**
      * Called when the screen is closed. Cleans up UI state: closes wheels, persists state,
      * resets input handlers, disables funnel mode, toggles camera if needed, and restores cursor.
      */
+    @Override
     public void onClose() {
         closeInteractionWheel();
-        closeShapeWheel();
         this.shapeController.clearShapeBuildSession();
         this.controller.clearAreaMineSession();
         persistUiState();
@@ -338,19 +338,19 @@ public final class BuilderScreen extends Screen {
         this.bottomPanel.craftQuantityDialog.close();
         this.overlayRenderer.updateNativeCursorVisibility(false);
     }
-    @Override
     /* Called when the screen is fully removed from the display stack. Resets camera vertical input and cursor. */
+    @Override
     public void removed() {
         super.removed();
         this.cameraInput.resetCameraVerticalHeld();
         this.overlayRenderer.updateNativeCursorVisibility(false);
     }
-    @Override
     /*
       Called every client tick. Updates shape state,
       updates funnel target position, syncs craftables panel state, and checks if
       active mining input is still held (stopping if released).
      */
+    @Override
     public void tick() {
         super.tick();
         this.shapeController.updateAltShapeWheelLifecycle();
@@ -381,28 +381,33 @@ public final class BuilderScreen extends Screen {
     @Override
     /*
       Handles mouse click input with RTS GUI scale remapping. Routes clicks through
-      the various UI components in priority order: quantity dialog, blueprint dialogs,
-      capture mode, ultimine editing, home selection, shape wheel, interaction wheel,
-      guide panel, gear menu, and world interaction (building, linking, rotating, etc.).
+      the various UI components in priority order: dialogs, blueprint capture, home selection,
+      overlays, area mine, left-click panels, and world click actions.
 
       @return true if the click was consumed by this screen, false otherwise
      */
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (!this.fixedRtsScaleInputPass) {
-            RtsUiScaleFrame frame = enterFixedRtsGuiScale();
-            if (frame != null && Math.abs(frame.scale() - 1.0D) >= 0.001D) {
-                this.fixedRtsScaleInputPass = true;
-                try {
-                    return mouseClicked(mouseX / frame.scale(), mouseY / frame.scale(), button);
-                } finally {
-                    this.fixedRtsScaleInputPass = false;
-                    frame.close();
-                }
-            }
-            if (frame != null) {
-                frame.close();
+        RtsUiScaleFrame frame = beginFixedRtsScaleInput();
+        if (frame != null && Math.abs(frame.scale() - 1.0D) >= 0.001D) {
+            try {
+                return mouseClicked(mouseX / frame.scale(), mouseY / frame.scale(), button);
+            } finally {
+                endFixedRtsScaleInput(frame);
             }
         }
+        endFixedRtsScaleInput(frame);
+        if (handleDialogClicks(mouseX, mouseY, button)) return true;
+        if (handleBlueprintCaptureClicks(mouseX, mouseY, button)) return true;
+        if (handleHomeSelectionClicks(mouseX, mouseY, button)) return true;
+        if (handleOverlayClicks(mouseX, mouseY, button)) return true;
+        if (handleAreaMineClickBlock(mouseX, mouseY, button)) return true;
+        if (handleLeftClickInteractions(mouseX, mouseY, button)) return true;
+        if (handleWorldClickActions(mouseX, mouseY, button)) return true;
+        return super.mouseClicked(mouseX, mouseY, button);
+    }
+
+    /** Handles click on open dialogs: craft quantity, blueprint name/material. */
+    private boolean handleDialogClicks(double mouseX, double mouseY, int button) {
         if (this.bottomPanel.craftQuantityDialog.isOpen()) {
             boolean handled = this.bottomPanel.craftQuantityDialog.mouseClicked(mouseX, mouseY, button, this.width, this.height);
             this.bottomPanel.submitCraftQuantityDialogIfReady();
@@ -414,49 +419,65 @@ public final class BuilderScreen extends Screen {
         if (BlueprintPanel.isMaterialDialogOpen()) {
             return BlueprintPanel.mouseClickedMaterialDialog(mouseX, mouseY, button, this.width, this.height);
         }
-        if (BlueprintPanel.isCaptureModeActive()) {
-            if (button == GLFW.GLFW_MOUSE_BUTTON_LEFT) {
-                this.cameraInput.stopActiveMining();
-                if (!BlueprintPanel.mouseClickedCaptureOverlay(mouseX, mouseY, this.width, this.height, TOP_H + 8)) {
-                    if (BlueprintPanel.isCaptureSelectionComplete() && isWorldArea(mouseX, mouseY)) {
-                        BlockHitResult hit = this.cursorPicker.pickBlockHit();
-                        if (hit != null
-                                && hit.getType() == HitResult.Type.BLOCK
-                                && BlueprintPanel.toggleCaptureBlockExclusion(hit.getBlockPos())) {
-                            return true;
-                        }
-                    }
-                    BlueprintPanel.cancelCaptureFromClick();
-                }
-                return true;
-            }
-            if (button == GLFW.GLFW_MOUSE_BUTTON_RIGHT) {
-                if (!BlueprintPanel.isCaptureSelectionComplete() && isWorldArea(mouseX, mouseY)) {
-                    BlockHitResult hit = this.cursorPicker.pickBlockHit();
-                    if (hit != null && hit.getType() == HitResult.Type.BLOCK) {
-                        BlueprintPanel.acceptCapturePoint(hit.getBlockPos());
-                    }
-                    return true;
-                }
-                if (!BlueprintPanel.isCaptureSelectionComplete()) {
-                    return true;
-                }
-            }
+        return false;
+    }
+
+    /** Handles left/right click in blueprint capture mode. */
+    private boolean handleBlueprintCaptureClicks(double mouseX, double mouseY, int button) {
+        if (!BlueprintPanel.isCaptureModeActive()) {
+            return false;
         }
-        if (this.controller.isHomeSelectionMode()) {
-            if (button == GLFW.GLFW_MOUSE_BUTTON_LEFT && isWorldArea(mouseX, mouseY)) {
-                BlockHitResult hit = this.cursorPicker.pickBlockHit();
-                if (hit != null) {
-                    this.controller.setHome(hit.getBlockPos());
+        if (button == GLFW.GLFW_MOUSE_BUTTON_LEFT) {
+            this.cameraInput.stopActiveMining();
+            if (!BlueprintPanel.mouseClickedCaptureOverlay(mouseX, mouseY, this.width, this.height, TOP_H + 8)) {
+                if (BlueprintPanel.isCaptureSelectionComplete() && isWorldArea(mouseX, mouseY)) {
+                    BlockHitResult hit = this.cursorPicker.pickBlockHit();
+                    if (hit != null
+                            && hit.getType() == HitResult.Type.BLOCK
+                            && BlueprintPanel.toggleCaptureBlockExclusion(hit.getBlockPos())) {
+                        return true;
+                    }
                 }
-                return true;
-            }
-            if (button == GLFW.GLFW_MOUSE_BUTTON_RIGHT || button == GLFW.GLFW_MOUSE_BUTTON_MIDDLE) {
-                RtsClientPacketGateway.sendToggleCamera(this.controller.isStartCameraAtPlayerHead());
-                return true;
+                BlueprintPanel.cancelCaptureFromClick();
             }
             return true;
         }
+        if (button == GLFW.GLFW_MOUSE_BUTTON_RIGHT) {
+            if (!BlueprintPanel.isCaptureSelectionComplete() && isWorldArea(mouseX, mouseY)) {
+                BlockHitResult hit = this.cursorPicker.pickBlockHit();
+                if (hit != null && hit.getType() == HitResult.Type.BLOCK) {
+                    BlueprintPanel.acceptCapturePoint(hit.getBlockPos());
+                }
+                return true;
+            }
+            if (!BlueprintPanel.isCaptureSelectionComplete()) {
+                return true;
+            }
+        }
+        return true;
+    }
+
+    /** Handles click in home selection mode. */
+    private boolean handleHomeSelectionClicks(double mouseX, double mouseY, int button) {
+        if (!this.controller.isHomeSelectionMode()) {
+            return false;
+        }
+        if (button == GLFW.GLFW_MOUSE_BUTTON_LEFT && isWorldArea(mouseX, mouseY)) {
+            BlockHitResult hit = this.cursorPicker.pickBlockHit();
+            if (hit != null) {
+                this.controller.setHome(hit.getBlockPos());
+            }
+            return true;
+        }
+        if (button == GLFW.GLFW_MOUSE_BUTTON_RIGHT || button == GLFW.GLFW_MOUSE_BUTTON_MIDDLE) {
+            RtsClientPacketGateway.sendToggleCamera(this.controller.isStartCameraAtPlayerHead());
+            return true;
+        }
+        return true;
+    }
+
+    /** Handles click on overlays: interaction wheel, floating windows, guide/gear panels. */
+    private boolean handleOverlayClicks(double mouseX, double mouseY, int button) {
         if (this.interactionWheelPanel.mouseClicked(mouseX, mouseY, button)) {
             return true;
         }
@@ -466,51 +487,70 @@ public final class BuilderScreen extends Screen {
         if (this.guidePanel.isOpen() || this.gearMenuPanel.isOpen()) {
             return true;
         }
-        // 范围破坏选区中，在 world area 内仅放行 left-click（由 startMiningAt 处理）
-        if (this.controller.getAreaMinePhase() != ClientRtsController.AREA_MINE_PHASE_NONE) {
-            if (isWorldArea(mouseX, mouseY) && !CameraInputHandler.isBreakActionMouse(button)) {
+        return false;
+    }
+
+    /** Blocks non-break clicks in world area during area mine selection. */
+    private boolean handleAreaMineClickBlock(double mouseX, double mouseY, int button) {
+        if (this.controller.getAreaMinePhase() == ClientRtsController.AREA_MINE_PHASE_NONE) {
+            return false;
+        }
+        if (isWorldArea(mouseX, mouseY) && !CameraInputHandler.isBreakActionMouse(button)) {
+            return true;
+        }
+        return false;
+    }
+
+    /** Handles left-click interactions: blueprint placement HUD, storage link, top bar, panels, gui bind, storage linking. */
+    private boolean handleLeftClickInteractions(double mouseX, double mouseY, int button) {
+        if (button != GLFW.GLFW_MOUSE_BUTTON_LEFT) {
+            return false;
+        }
+        boolean insideBottomPanel = isInsideBottomPanel(mouseX, mouseY);
+        if (!insideBottomPanel
+                && this.bottomPanel.bottomPanelTab == BottomPanelLayoutTypes.BottomPanelTab.BLUEPRINTS
+                && BlueprintPanel.mouseClickedPlacementHud(mouseX, mouseY, this.width, this.height, TOP_H + 8, this.bottomPanel.getBottomY(), this.controller)) {
+            return true;
+        }
+        if (this.storageLinkDetailHandler.handleClick(mouseX, mouseY)) {
+            return true;
+        }
+        if (this.topBarPanel.handleClick(mouseX, mouseY)) {
+            return true;
+        }
+        if (this.funnelBufferPanel.handleClick(mouseX, mouseY)) {
+            return true;
+        }
+        if (this.bottomPanel.handleClick(mouseX, mouseY)) {
+            return true;
+        }
+        if (this.pendingGuiBindSlot >= 0 && isWorldArea(mouseX, mouseY)) {
+            BlockHitResult hit = this.cursorPicker.pickBlockHit();
+            if (hit != null) {
+                this.controller.setGuiBinding(
+                        this.pendingGuiBindSlot,
+                        hit.getBlockPos(),
+                        hit.getDirection(),
+                        resolveGuiBindingItemId(hit));
+                this.pendingGuiBindSlot = -1;
+            }
+            return true;
+        }
+        if (isWorldArea(mouseX, mouseY) && this.controller.getMode() == BuilderMode.LINK_STORAGE) {
+            BlockHitResult hit = this.cursorPicker.pickBlockHit();
+            if (hit != null) {
+                this.controller.linkStorage(hit.getBlockPos());
                 return true;
             }
         }
-        if (button == GLFW.GLFW_MOUSE_BUTTON_LEFT) {
-            boolean insideBottomPanel = isInsideBottomPanel(mouseX, mouseY);
-            if (!insideBottomPanel
-                    && this.bottomPanel.bottomPanelTab == BottomPanelLayoutTypes.BottomPanelTab.BLUEPRINTS
-                    && BlueprintPanel.mouseClickedPlacementHud(mouseX, mouseY, this.width, this.height, TOP_H + 8, this.bottomPanel.getBottomY(), this.controller)) {
-                return true;
-            }
-            if (handleStorageLinkDetailActionClick(mouseX, mouseY)) {
-                return true;
-            }
-            if (this.topBarPanel.handleClick(mouseX, mouseY)) {
-                return true;
-            }
-            if (this.funnelBufferPanel.handleClick(mouseX, mouseY)) {
-                return true;
-            }
-            if (this.bottomPanel.handleClick(mouseX, mouseY)) {
-                return true;
-            }
-            if (this.pendingGuiBindSlot >= 0 && isWorldArea(mouseX, mouseY)) {
-                BlockHitResult hit = this.cursorPicker.pickBlockHit();
-                if (hit != null) {
-                    this.controller.setGuiBinding(
-                            this.pendingGuiBindSlot,
-                            hit.getBlockPos(),
-                            hit.getDirection(),
-                            resolveGuiBindingItemId(hit));
-                    this.pendingGuiBindSlot = -1;
-                }
-                return true;
-            }
-            if (isWorldArea(mouseX, mouseY) && this.controller.getMode() == BuilderMode.LINK_STORAGE) {
-                BlockHitResult hit = this.cursorPicker.pickBlockHit();
-                if (hit != null) {
-                    this.controller.linkStorage(hit.getBlockPos());
-                    return true;
-                }
-            }
-        }
+        return false;
+    }
+
+    /**
+     * Handles world click actions: break action, primary/rotate mouse,
+     * and pan/pick mouse actions.
+     */
+    private boolean handleWorldClickActions(double mouseX, double mouseY, int button) {
         if (CameraInputHandler.isBreakActionMouse(button)
                 && CameraInputHandler.canStartBreakActionOnMouse(button)
                 && this.cameraInput.startMiningAt(mouseX, mouseY, button, false)) {
@@ -555,7 +595,7 @@ public final class BuilderScreen extends Screen {
             this.cameraInput.beginMiddlePress(isWorldArea(mouseX, mouseY), button, panMouse, pickMouse);
             return true;
         }
-        return super.mouseClicked(mouseX, mouseY, button);
+        return false;
     }
     @Override
     /**
@@ -563,21 +603,15 @@ public final class BuilderScreen extends Screen {
      * open dialogs, dragging state, wheel panels, and camera input handlers.
      */
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
-        if (!this.fixedRtsScaleInputPass) {
-            RtsUiScaleFrame frame = enterFixedRtsGuiScale();
-            if (frame != null && Math.abs(frame.scale() - 1.0D) >= 0.001D) {
-                this.fixedRtsScaleInputPass = true;
-                try {
-                    return mouseReleased(mouseX / frame.scale(), mouseY / frame.scale(), button);
-                } finally {
-                    this.fixedRtsScaleInputPass = false;
-                    frame.close();
-                }
-            }
-            if (frame != null) {
-                frame.close();
+        RtsUiScaleFrame frame = beginFixedRtsScaleInput();
+        if (frame != null && Math.abs(frame.scale() - 1.0D) >= 0.001D) {
+            try {
+                return mouseReleased(mouseX / frame.scale(), mouseY / frame.scale(), button);
+            } finally {
+                endFixedRtsScaleInput(frame);
             }
         }
+        endFixedRtsScaleInput(frame);
         if (this.bottomPanel.craftQuantityDialog.isOpen()) {
             return true;
         }
@@ -615,21 +649,15 @@ public final class BuilderScreen extends Screen {
      * and search box focus logic.
      */
     public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
-        if (!this.fixedRtsScaleInputPass) {
-            RtsUiScaleFrame frame = enterFixedRtsGuiScale();
-            if (frame != null && Math.abs(frame.scale() - 1.0D) >= 0.001D) {
-                this.fixedRtsScaleInputPass = true;
-                try {
-                    return mouseDragged(mouseX / frame.scale(), mouseY / frame.scale(), button, dragX / frame.scale(), dragY / frame.scale());
-                } finally {
-                    this.fixedRtsScaleInputPass = false;
-                    frame.close();
-                }
-            }
-            if (frame != null) {
-                frame.close();
+        RtsUiScaleFrame frame = beginFixedRtsScaleInput();
+        if (frame != null && Math.abs(frame.scale() - 1.0D) >= 0.001D) {
+            try {
+                return mouseDragged(mouseX / frame.scale(), mouseY / frame.scale(), button, dragX / frame.scale(), dragY / frame.scale());
+            } finally {
+                endFixedRtsScaleInput(frame);
             }
         }
+        endFixedRtsScaleInput(frame);
         if (this.bottomPanel.craftQuantityDialog.isOpen()) {
             return true;
         }
@@ -670,22 +698,16 @@ public final class BuilderScreen extends Screen {
     @Override
     /** Handles mouse movement with RTS GUI scale remapping. Updates keyboard-pan drag state. */
     public void mouseMoved(double mouseX, double mouseY) {
-        if (!this.fixedRtsScaleInputPass) {
-            RtsUiScaleFrame frame = enterFixedRtsGuiScale();
-            if (frame != null && Math.abs(frame.scale() - 1.0D) >= 0.001D) {
-                this.fixedRtsScaleInputPass = true;
-                try {
-                    mouseMoved(mouseX / frame.scale(), mouseY / frame.scale());
-                    return;
-                } finally {
-                    this.fixedRtsScaleInputPass = false;
-                    frame.close();
-                }
-            }
-            if (frame != null) {
-                frame.close();
+        RtsUiScaleFrame frame = beginFixedRtsScaleInput();
+        if (frame != null && Math.abs(frame.scale() - 1.0D) >= 0.001D) {
+            try {
+                mouseMoved(mouseX / frame.scale(), mouseY / frame.scale());
+                return;
+            } finally {
+                endFixedRtsScaleInput(frame);
             }
         }
+        endFixedRtsScaleInput(frame);
         this.cameraInput.updateKeyboardPanDrag(mouseX, mouseY);
         super.mouseMoved(mouseX, mouseY);
     }
@@ -876,21 +898,15 @@ public final class BuilderScreen extends Screen {
      * previews, rotation mode, and item slot scrolling.
      */
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
-        if (!this.fixedRtsScaleInputPass) {
-            RtsUiScaleFrame frame = enterFixedRtsGuiScale();
-            if (frame != null && Math.abs(frame.scale() - 1.0D) >= 0.001D) {
-                this.fixedRtsScaleInputPass = true;
-                try {
-                    return mouseScrolled(mouseX / frame.scale(), mouseY / frame.scale(), scrollX, scrollY);
-                } finally {
-                    this.fixedRtsScaleInputPass = false;
-                    frame.close();
-                }
-            }
-            if (frame != null) {
-                frame.close();
+        RtsUiScaleFrame frame = beginFixedRtsScaleInput();
+        if (frame != null && Math.abs(frame.scale() - 1.0D) >= 0.001D) {
+            try {
+                return mouseScrolled(mouseX / frame.scale(), mouseY / frame.scale(), scrollX, scrollY);
+            } finally {
+                endFixedRtsScaleInput(frame);
             }
         }
+        endFixedRtsScaleInput(frame);
         if (this.bottomPanel.craftQuantityDialog.isOpen()) {
             return this.bottomPanel.craftQuantityDialog.mouseScrolled(scrollY);
         }
@@ -939,14 +955,23 @@ public final class BuilderScreen extends Screen {
     }
     @Override
     /**
-     * Handles key press events. Processes input for: quantity dialog, blueprint dialogs,
-     * blueprint capture, home selection, ultimine editing, wheel panels, guide panel,
-     * gear menu, undo/redo (Ctrl+Z/Y), mouse-wheel shape height adjustment,
-     * camera vertical movement, break action, pick block, primary action, mode switching,
-     * funnel hotkey, quick drop, shape rotation, craft terminal, search focus management,
-     * tool slot selection (1-9), quick-slot pinning, and input sensitivity adjustment.
+     * Handles key press events. Dispatches to dialog, blueprint, overlay, world interaction,
+     * search box, tool slot, and sensitivity handlers in priority order.
      */
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (handleDialogKeys(keyCode, scanCode, modifiers)) return true;
+        if (handleBlueprintKeys(keyCode, scanCode, modifiers)) return true;
+        if (handleHomeSelectionKey(keyCode)) return true;
+        if (handleOverlayKeys(keyCode, scanCode, modifiers)) return true;
+        if (handleWorldInteractionKeys(keyCode, scanCode, modifiers)) return true;
+        if (handleSearchFocusKeys(keyCode, scanCode, modifiers)) return true;
+        if (handleToolSlotKeys(keyCode, scanCode, modifiers)) return true;
+        if (handleSensitivityKeys(keyCode, scanCode)) return true;
+        return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+
+    /** Dispatches key to craft quantity dialog and blueprint name/material dialogs. */
+    private boolean handleDialogKeys(int keyCode, int scanCode, int modifiers) {
         if (this.bottomPanel.craftQuantityDialog.isOpen()) {
             boolean handled = this.bottomPanel.craftQuantityDialog.keyPressed(keyCode, scanCode, modifiers);
             this.bottomPanel.submitCraftQuantityDialogIfReady();
@@ -958,6 +983,11 @@ public final class BuilderScreen extends Screen {
         if (BlueprintPanel.keyPressedMaterialDialog(keyCode)) {
             return true;
         }
+        return false;
+    }
+
+    /** Dispatches key to blueprint capture mode and blueprint panel. */
+    private boolean handleBlueprintKeys(int keyCode, int scanCode, int modifiers) {
         if (BlueprintPanel.isCaptureModeActive() && BlueprintPanel.keyPressed(keyCode, scanCode, this.controller)) {
             return true;
         }
@@ -965,12 +995,22 @@ public final class BuilderScreen extends Screen {
                 && BlueprintPanel.keyPressed(keyCode, scanCode, this.controller)) {
             return true;
         }
-        if (this.controller.isHomeSelectionMode()) {
-            if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
-                RtsClientPacketGateway.sendToggleCamera(this.controller.isStartCameraAtPlayerHead());
-            }
-            return true;
+        return false;
+    }
+
+    /** Handles Esc in home selection mode. */
+    private boolean handleHomeSelectionKey(int keyCode) {
+        if (!this.controller.isHomeSelectionMode()) {
+            return false;
         }
+        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+            RtsClientPacketGateway.sendToggleCamera(this.controller.isStartCameraAtPlayerHead());
+        }
+        return true;
+    }
+
+    /** Dispatches key to interaction wheel, floating windows, and guide/gear overlays. */
+    private boolean handleOverlayKeys(int keyCode, int scanCode, int modifiers) {
         if (this.interactionWheelPanel.keyPressed(keyCode)) {
             return true;
         }
@@ -980,6 +1020,15 @@ public final class BuilderScreen extends Screen {
         if (this.guidePanel.isOpen() || this.gearMenuPanel.isOpen()) {
             return true;
         }
+        return false;
+    }
+
+    /**
+     * Dispatches key to world interaction: area mine, gui bind, undo/redo, camera vertical,
+     * mining, pick block, primary action, mode switch, funnel hotkey, quick drop,
+     * shape rotation, and craft terminal.
+     */
+    private boolean handleWorldInteractionKeys(int keyCode, int scanCode, int modifiers) {
         // 范围破坏选区中，阻止除挖矿键之外的其他世界交互键盘操作
         if (this.controller.getAreaMinePhase() != ClientRtsController.AREA_MINE_PHASE_NONE) {
             if (!ClientKeyMappings.ACTION_BREAK.matches(keyCode, scanCode)) {
@@ -1027,7 +1076,7 @@ public final class BuilderScreen extends Screen {
         }
         if (!isSearchFocused() && ClientKeyMappings.ROTATE_SHAPE.matches(keyCode, scanCode) && !hasControlDown()) {
             if (hasRecipeViewerLoaded()) {
-                return super.keyPressed(keyCode, scanCode, modifiers);
+                return false; // let super handle it for recipe viewer keybinds
             }
             this.shapeController.rotateShapeByStep(hasShiftDown() ? -1 : 1);
             return true;
@@ -1039,6 +1088,11 @@ public final class BuilderScreen extends Screen {
             this.controller.openCraftTerminal();
             return true;
         }
+        return false;
+    }
+
+    /** Handles search box key events: clear on Escape, typing, and Enter submission. */
+    private boolean handleSearchFocusKeys(int keyCode, int scanCode, int modifiers) {
         if (isSearchFocused() && keyCode == GLFW.GLFW_KEY_ESCAPE) {
             if (this.searchBox != null && this.searchBox.isFocused()) {
                 this.searchBox.setValue("");
@@ -1070,6 +1124,11 @@ public final class BuilderScreen extends Screen {
             this.craftSearchBox.keyPressed(keyCode, scanCode, modifiers);
             return true;
         }
+        return false;
+    }
+
+    /** Handles tool slot selection (1-9) and pin-quick-slot keybinds. */
+    private boolean handleToolSlotKeys(int keyCode, int scanCode, int modifiers) {
         if (!isSearchFocused() && keyCode >= GLFW.GLFW_KEY_1 && keyCode <= GLFW.GLFW_KEY_9) {
             int slot = keyCode - GLFW.GLFW_KEY_1;
             setSelectedToolSlot(slot);
@@ -1090,6 +1149,11 @@ public final class BuilderScreen extends Screen {
                 }
             }
         }
+        return false;
+    }
+
+    /** Handles input sensitivity adjustment keys. */
+    private boolean handleSensitivityKeys(int keyCode, int scanCode) {
         if (ClientKeyMappings.DECREASE_SENSITIVITY.matches(keyCode, scanCode)) {
             this.controller.decreaseRotateSensitivity();
             return true;
@@ -1098,7 +1162,7 @@ public final class BuilderScreen extends Screen {
             this.controller.increaseRotateSensitivity();
             return true;
         }
-        return super.keyPressed(keyCode, scanCode, modifiers);
+        return false;
     }
     @Override
     /** Handles key release for funnel hotkey and camera vertical movement states. */
@@ -1147,7 +1211,6 @@ public final class BuilderScreen extends Screen {
         this.cameraInput.stopActiveMining();
         this.shapeController.clearShapeBuildSession();
         closeInteractionWheel();
-        closeShapeWheel();
         this.controller.setMode(mode);
         this.controller.setFunnelEnabled(funnelEnabled);
         this.funnelHotkeyHeld = false;
@@ -1195,18 +1258,7 @@ public final class BuilderScreen extends Screen {
         }
         this.lastMouseX = mouseX;
         this.lastMouseY = mouseY;
-        this.shapeController.setShapeCursorY(mouseY);
-        this.funnelBufferPanel.resetHoveredEntry();
-        this.bottomPanel.hoveredEntry = -1;
-        this.bottomPanel.hoveredRecentEntry = -1;
-        this.bottomPanel.hoveredFluidEntry = -1;
-        this.bottomPanel.hoveredCreativeEntry = -1;
-        this.bottomPanel.hoveredCraftableEntry = -1;
-        this.bottomPanel.hoveredToolSlot = -1;
-        this.bottomPanel.hoveredEmptyHandSlot = false;
-        this.bottomPanel.hoveredPinIndex = -1;
-        this.bottomPanel.hoveredGuiBindingSlot = -1;
-        this.bottomPanel.hoveredPinPageButton = false;
+        resetHoverStates();
         guiGraphics.fill(0, 0, this.width, TOP_H, 0xC0101116);
         if (this.controller.isHomeSelectionMode()) {
             this.overlayRenderer.renderHomeSelectionOverlay(guiGraphics, mouseX, mouseY);
@@ -1214,7 +1266,7 @@ public final class BuilderScreen extends Screen {
             return;
         }
         this.topBarPanel.render(guiGraphics, mouseX, mouseY);
-        renderStorageLinkDetailAction(guiGraphics, mouseX, mouseY);
+        this.storageLinkDetailHandler.render(guiGraphics, mouseX, mouseY);
         this.bottomPanel.render(guiGraphics, mouseX, mouseY, partialTick);
         this.funnelBufferPanel.render(guiGraphics, mouseX, mouseY);
         this.floatingWindowLayer.renderFloatingWindows(guiGraphics, mouseX, mouseY);
@@ -1230,6 +1282,34 @@ public final class BuilderScreen extends Screen {
             BlueprintPanel.renderPlacementHud(guiGraphics, this.font, this.controller,
                     this.width, this.height, mouseX, mouseY, TOP_H + 8, this.bottomPanel.getBottomY());
         }
+        renderHoveredItemTooltips(guiGraphics, mouseX, mouseY);
+        this.bottomPanel.renderCraftFeedback(guiGraphics);
+        renderModalOverlays(guiGraphics, mouseX, mouseY);
+        this.overlayRenderer.renderDamageFlash(guiGraphics);
+    }
+
+    /** Resets all panel hover states before each render frame. */
+    private void resetHoverStates() {
+        this.shapeController.setShapeCursorY(this.lastMouseY);
+        this.funnelBufferPanel.resetHoveredEntry();
+        this.bottomPanel.hoveredEntry = -1;
+        this.bottomPanel.hoveredRecentEntry = -1;
+        this.bottomPanel.hoveredFluidEntry = -1;
+        this.bottomPanel.hoveredCreativeEntry = -1;
+        this.bottomPanel.hoveredCraftableEntry = -1;
+        this.bottomPanel.hoveredToolSlot = -1;
+        this.bottomPanel.hoveredEmptyHandSlot = false;
+        this.bottomPanel.hoveredPinIndex = -1;
+        this.bottomPanel.hoveredGuiBindingSlot = -1;
+        this.bottomPanel.hoveredPinPageButton = false;
+    }
+
+    /**
+     * Renders tooltips and cursor overlay for hovered items when no modal is open.
+     * Handles creative entries, storage entries, recent items, fluids, craftables,
+     * funnel buffer, GUI bind slots, empty hand slot, and discoverability hints.
+     */
+    private void renderHoveredItemTooltips(GuiGraphics g, int mouseX, int mouseY) {
         boolean modalOpen = this.gearMenuPanel.isOpen()
                 || this.guidePanel.isOpen()
                 || this.interactionWheelPanel.isOpen()
@@ -1242,23 +1322,23 @@ public final class BuilderScreen extends Screen {
                     && this.bottomPanel.hoveredCreativeEntry >= 0) {
                 var entry = this.bottomPanel.getCreativeEntryForTooltip(this.bottomPanel.hoveredCreativeEntry);
                 if (entry != null) {
-                    renderLeftDockedTooltip(guiGraphics, entry.stack());
+                    renderLeftDockedTooltip(g, entry.stack());
                 }
             }
             if (!placementSelectionActive
                     && this.bottomPanel.hoveredEntry >= 0
                     && this.bottomPanel.hoveredEntry < this.controller.getStorageEntries().size()) {
                 var entry = this.controller.getStorageEntries().get(this.bottomPanel.hoveredEntry);
-                renderLeftDockedTooltip(guiGraphics, entry.stack());
+                renderLeftDockedTooltip(g, entry.stack());
             }
             if (!placementSelectionActive
                     && this.bottomPanel.hoveredRecentEntry >= 0
                     && this.bottomPanel.hoveredRecentEntry < this.controller.getRecentEntries().size()) {
                 var entry = this.controller.getRecentEntries().get(this.bottomPanel.hoveredRecentEntry);
                 if (!entry.preview().isEmpty()) {
-                    renderLeftDockedTooltip(guiGraphics, entry.preview());
+                    renderLeftDockedTooltip(g, entry.preview());
                 } else {
-                    renderLeftDockedTooltip(guiGraphics, Component.literal(entry.label()));
+                    renderLeftDockedTooltip(g, Component.literal(entry.label()));
                 }
             }
             if (!placementSelectionActive
@@ -1266,33 +1346,33 @@ public final class BuilderScreen extends Screen {
                     && this.bottomPanel.hoveredFluidEntry < this.controller.getFluidEntries().size()) {
                 var fluid = this.controller.getFluidEntries().get(this.bottomPanel.hoveredFluidEntry);
                 if (!fluid.preview().isEmpty()) {
-                    renderLeftDockedTooltip(guiGraphics, fluid.preview());
+                    renderLeftDockedTooltip(g, fluid.preview());
                 } else {
-                    renderLeftDockedTooltip(guiGraphics, Component.literal(fluid.label()));
+                    renderLeftDockedTooltip(g, Component.literal(fluid.label()));
                 }
             }
             if (this.bottomPanel.hoveredCraftableEntry >= 0 && this.bottomPanel.hoveredCraftableEntry < this.controller.getCraftableEntries().size()) {
                 var entry = this.controller.getCraftableEntries().get(this.bottomPanel.hoveredCraftableEntry);
-                renderLeftDockedTooltip(guiGraphics, entry.stack());
+                renderLeftDockedTooltip(g, entry.stack());
                 String detail = entry.craftable()
                         ? text("screen.rtsbuilding.tooltip.craft_choose")
                         : entry.missingSummary();
                 if (detail != null && !detail.isBlank()) {
-                    renderLeftDockedTooltipDetail(guiGraphics, detail, entry.craftable() ? 0xFFAEE8AE : 0xFFFFB0B0);
+                    renderLeftDockedTooltipDetail(g, detail, entry.craftable() ? 0xFFAEE8AE : 0xFFFFB0B0);
                 }
             }
             if (this.funnelBufferPanel.getHoveredEntry() >= 0 && this.funnelBufferPanel.getHoveredEntry() < this.controller.getFunnelBufferEntries().size()) {
                 var entry = this.controller.getFunnelBufferEntries().get(this.funnelBufferPanel.getHoveredEntry());
-                renderLeftDockedTooltip(guiGraphics, entry.stack());
-                renderLeftDockedTooltipDetail(guiGraphics, text("screen.rtsbuilding.tooltip.buffered", entry.count()), 0xFFD8B8);
+                renderLeftDockedTooltip(g, entry.stack());
+                renderLeftDockedTooltipDetail(g, text("screen.rtsbuilding.tooltip.buffered", entry.count()), 0xFFD8B8);
             }
             if (this.bottomPanel.hoveredGuiBindingSlot >= 0 && this.bottomPanel.hoveredGuiBindingSlot < this.controller.getGuiBindingCount()) {
                 String detail = this.controller.hasGuiBinding(this.bottomPanel.hoveredGuiBindingSlot)
                         ? this.controller.getGuiBindingLabel(this.bottomPanel.hoveredGuiBindingSlot)
                         : text("screen.rtsbuilding.tooltip.gui_empty");
-                renderLeftDockedTooltip(guiGraphics, Component.literal(detail));
+                renderLeftDockedTooltip(g, Component.literal(detail));
                 renderLeftDockedTooltipDetail(
-                        guiGraphics,
+                        g,
                         this.pendingGuiBindSlot == this.bottomPanel.hoveredGuiBindingSlot
                                 ? text("screen.rtsbuilding.tooltip.gui_cancel_bind")
                                 : (this.controller.hasGuiBinding(this.bottomPanel.hoveredGuiBindingSlot)
@@ -1301,44 +1381,50 @@ public final class BuilderScreen extends Screen {
                         0xFFCFE3F7);
             }
             if (this.bottomPanel.hoveredEmptyHandSlot) {
-                renderLeftDockedTooltip(guiGraphics, Component.translatable("screen.rtsbuilding.tooltip.empty_hand"));
-                renderLeftDockedTooltipDetail(guiGraphics, text("screen.rtsbuilding.tooltip.empty_hand_detail"), 0xFFD8B8);
+                renderLeftDockedTooltip(g, Component.translatable("screen.rtsbuilding.tooltip.empty_hand"));
+                renderLeftDockedTooltipDetail(g, text("screen.rtsbuilding.tooltip.empty_hand_detail"), 0xFFD8B8);
             }
-            renderDiscoverabilityTooltips(guiGraphics, mouseX, mouseY);
+            renderDiscoverabilityTooltips(g, mouseX, mouseY);
             boolean funnelCursor = shouldRenderFunnelCursor();
             this.overlayRenderer.updateNativeCursorVisibility(funnelCursor);
             if (funnelCursor) {
-                guiGraphics.renderItem(FUNNEL_CURSOR_STACK, mouseX + 8, mouseY + 8);
+                g.renderItem(FUNNEL_CURSOR_STACK, mouseX + 8, mouseY + 8);
             } else if (this.pendingGuiBindSlot >= 0) {
-                drawGuiBindCursor(guiGraphics, mouseX, mouseY);
+                drawGuiBindCursor(g, mouseX, mouseY);
             } else {
                 ItemStack cursorPreview = resolveCursorPreview();
                 if (!cursorPreview.isEmpty() && !isSearchFocused() && !this.guidePanel.isOpen() && !this.interactionWheelPanel.isOpen()) {
-                    guiGraphics.renderItem(cursorPreview, mouseX + 10, mouseY + 10);
+                    g.renderItem(cursorPreview, mouseX + 10, mouseY + 10);
                 }
             }
         } else {
             this.overlayRenderer.updateNativeCursorVisibility(false);
         }
-        this.bottomPanel.renderCraftFeedback(guiGraphics);
+    }
+
+    /**
+     * Renders modal overlays (interaction wheel, material/name dialogs, craft quantity
+     * dialog) at elevated Z-layers to appear above other elements.
+     */
+    private void renderModalOverlays(GuiGraphics g, int mouseX, int mouseY) {
         if (this.interactionWheelPanel.isOpen()) {
-            renderAtGuiLayer(guiGraphics, RTS_MODAL_LAYER_Z, () -> renderInteractionWheel(guiGraphics, mouseX, mouseY));
+            renderAtGuiLayer(g, RTS_MODAL_LAYER_Z, () -> renderInteractionWheel(g, mouseX, mouseY));
         }
         if (BlueprintPanel.isMaterialDialogOpen()) {
-            renderAtGuiLayer(guiGraphics, RTS_MODAL_LAYER_Z + 50.0F,
-                    () -> BlueprintPanel.renderMaterialDialog(guiGraphics, this.font, this.controller,
+            renderAtGuiLayer(g, RTS_MODAL_LAYER_Z + 50.0F,
+                    () -> BlueprintPanel.renderMaterialDialog(g, this.font, this.controller,
                             this.width, this.height, mouseX, mouseY));
         }
         if (BlueprintPanel.isNameDialogOpen()) {
-            renderAtGuiLayer(guiGraphics, RTS_MODAL_LAYER_Z + 55.0F,
-                    () -> BlueprintPanel.renderNameDialog(guiGraphics, this.font, this.width, this.height, mouseX, mouseY));
+            renderAtGuiLayer(g, RTS_MODAL_LAYER_Z + 55.0F,
+                    () -> BlueprintPanel.renderNameDialog(g, this.font, this.width, this.height, mouseX, mouseY));
         }
         if (this.bottomPanel.craftQuantityDialog.isOpen()) {
-            renderAtGuiLayer(guiGraphics, RTS_MODAL_LAYER_Z + 60.0F,
-                    () -> this.bottomPanel.craftQuantityDialog.render(guiGraphics, this.font, this.width, this.height, mouseX, mouseY));
+            renderAtGuiLayer(g, RTS_MODAL_LAYER_Z + 60.0F,
+                    () -> this.bottomPanel.craftQuantityDialog.render(g, this.font, this.width, this.height, mouseX, mouseY));
         }
-        this.overlayRenderer.renderDamageFlash(guiGraphics);
     }
+
     /**
      * Renders a sub-component at an elevated Z-layer to ensure it appears above other
      * game/screen elements.
@@ -1385,6 +1471,30 @@ public final class BuilderScreen extends Screen {
         }
         return true;
     }
+    /**
+     * Begins a fixed RTS GUI scale input frame. Returns the scale frame if scaling
+     * is needed (caller must call {@link #endFixedRtsScaleInput}), or null/unit-scale
+     * frame if no remapping is required.
+     */
+    private RtsUiScaleFrame beginFixedRtsScaleInput() {
+        if (this.fixedRtsScaleInputPass) return null;
+        RtsUiScaleFrame frame = enterFixedRtsGuiScale();
+        if (frame != null && Math.abs(frame.scale() - 1.0D) >= 0.001D) {
+            this.fixedRtsScaleInputPass = true;
+        }
+        return frame;
+    }
+
+    /**
+     * Ends a fixed RTS GUI scale input frame, resetting the pass flag and restoring
+     * original window dimensions.
+     */
+    private void endFixedRtsScaleInput(RtsUiScaleFrame frame) {
+        if (frame == null) return;
+        this.fixedRtsScaleInputPass = false;
+        frame.close();
+    }
+
     /**
      * Enters a fixed RTS GUI scale frame by temporarily adjusting the screen width/height
      * to virtual dimensions that produce the desired render scale. Returns an
@@ -1592,7 +1702,6 @@ public final class BuilderScreen extends Screen {
         this.cameraInput.stopActiveMining();
         this.shapeController.clearShapeBuildSession();
         closeInteractionWheel();
-        closeShapeWheel();
         if (this.controller.getMode() != BuilderMode.FUNNEL) {
             this.modeBeforeFunnelHotkey = this.controller.getMode();
         }
@@ -1713,7 +1822,7 @@ public final class BuilderScreen extends Screen {
         if (this.guidePanel.isOpen() || this.interactionWheelPanel.isOpen()) {
             return;
         }
-        if (renderStorageLinkStatusTooltip(g, mouseX, mouseY)) {
+        if (this.storageLinkDetailHandler.renderStatusTooltip(g, mouseX, mouseY)) {
             return;
         }
         if (mouseY >= 42 && mouseY <= 56) {
@@ -1727,106 +1836,6 @@ public final class BuilderScreen extends Screen {
                 return;
             }
         }
-    }
-
-    private void renderStorageLinkDetailAction(GuiGraphics g, int mouseX, int mouseY) {
-        if (this.guidePanel.isOpen() || this.interactionWheelPanel.isOpen()) {
-            return;
-        }
-        TopBarTypes.TopBarButtonLayout linkButton = findTopBarButton(TopBarTypes.TopBarButtonId.LINK);
-        if (linkButton == null || !isStorageLinkDetailActionVisible(mouseX, mouseY, linkButton)) {
-            return;
-        }
-        String label = text("screen.rtsbuilding.storage_links.action");
-        int w = storageLinkDetailActionW(linkButton, label);
-        int x = storageLinkDetailActionX(linkButton, label);
-        int y = storageLinkDetailActionY();
-        boolean hovered = inside(mouseX, mouseY, x, y, w, STORAGE_LINK_DETAIL_ACTION_H);
-        RtsClientUiUtil.drawPanelFrame(g, x, y, w, STORAGE_LINK_DETAIL_ACTION_H,
-                hovered ? 0xFF26394A : 0xF817212D,
-                hovered ? 0xFFB7D2EC : 0xFF6C839A,
-                0xFF0D1117);
-        RtsClientUiUtil.drawCenteredStringNoShadow(g, this.font,
-                trimToWidth(label, Math.max(8, w - 8)), x + w / 2, y + 4, 0xFFF4FAFF);
-    }
-
-    private boolean handleStorageLinkDetailActionClick(double mouseX, double mouseY) {
-        TopBarTypes.TopBarButtonLayout linkButton = findTopBarButton(TopBarTypes.TopBarButtonId.LINK);
-        if (linkButton == null) {
-            return false;
-        }
-        String label = text("screen.rtsbuilding.storage_links.action");
-        int w = storageLinkDetailActionW(linkButton, label);
-        int x = storageLinkDetailActionX(linkButton, label);
-        int y = storageLinkDetailActionY();
-        if (!inside(mouseX, mouseY, x, y, w, STORAGE_LINK_DETAIL_ACTION_H)) {
-            return false;
-        }
-        closeGearMenu();
-        this.linkedStoragePanel.openNear(x, y + STORAGE_LINK_DETAIL_ACTION_H + 2);
-        return true;
-    }
-
-    private boolean isStorageLinkDetailActionVisible(int mouseX, int mouseY, TopBarTypes.TopBarButtonLayout linkButton) {
-        String label = text("screen.rtsbuilding.storage_links.action");
-        int w = storageLinkDetailActionW(linkButton, label);
-        int x = storageLinkDetailActionX(linkButton, label);
-        int y = storageLinkDetailActionY();
-        int bridgeX = Math.min(linkButton.x(), x);
-        int bridgeRight = Math.max(linkButton.x() + linkButton.width(), x + w);
-        int bridgeY = 4 + TOP_BUTTON_H;
-        int bridgeH = Math.max(0, y - bridgeY);
-        return inside(mouseX, mouseY, linkButton.x(), 4, linkButton.width(), TOP_BUTTON_H)
-                || inside(mouseX, mouseY, x, y, w, STORAGE_LINK_DETAIL_ACTION_H)
-                || inside(mouseX, mouseY, bridgeX, bridgeY, bridgeRight - bridgeX, bridgeH);
-    }
-
-    private TopBarTypes.TopBarButtonLayout findTopBarButton(TopBarTypes.TopBarButtonId id) {
-        for (TopBarTypes.TopBarButtonLayout button : this.topBarPanel.buildTopBarButtonLayouts()) {
-            if (button.id() == id) {
-                return button;
-            }
-        }
-        return null;
-    }
-
-    private int storageLinkDetailActionX(TopBarTypes.TopBarButtonLayout linkButton, String label) {
-        int w = storageLinkDetailActionW(linkButton, label);
-        int centered = linkButton.x() + linkButton.width() / 2 - w / 2;
-        return Mth.clamp(centered, 4, Math.max(4, this.width - w - 4));
-    }
-
-    private int storageLinkDetailActionY() {
-        return TOP_H + 2;
-    }
-
-    private int storageLinkDetailActionW(TopBarTypes.TopBarButtonLayout linkButton, String label) {
-        int desired = Math.max(linkButton.width(), this.font.width(label) + 12);
-        return Math.min(desired, Math.max(40, this.width - 8));
-    }
-
-    private boolean renderStorageLinkStatusTooltip(GuiGraphics g, int mouseX, int mouseY) {
-        if (mouseY < 42 || mouseY > 56) {
-            return false;
-        }
-        String linkedText = this.controller.isStorageLinked()
-                ? text("screen.rtsbuilding.status.storage_linked", this.controller.getLinkedStorageName())
-                : text("screen.rtsbuilding.status.storage_not_linked");
-        int linkedW = Math.min(this.font.width(linkedText), Math.max(20, this.width - 16));
-        if (!inside(mouseX, mouseY, 8, 42, linkedW, 14)) {
-            return false;
-        }
-        int linkedCount = this.controller.getLinkedStoragePositions().size();
-        if (this.controller.isStorageLinked()) {
-            g.renderComponentTooltip(this.font, List.of(
-                    Component.translatable("screen.rtsbuilding.tooltip.storage_linked_short",
-                            this.controller.getLinkedStorageName(), linkedCount),
-                    Component.translatable("screen.rtsbuilding.tooltip.storage_unbind_short")),
-                    mouseX, mouseY);
-        } else {
-            g.renderTooltip(this.font, Component.translatable("screen.rtsbuilding.tooltip.storage_unlinked_short"), mouseX, mouseY);
-        }
-        return true;
     }
 
     /**
@@ -2157,11 +2166,9 @@ public final class BuilderScreen extends Screen {
     public void closeInteractionWheel() {
         this.interactionWheelPanel.close();
     }
-    /** Retired shape-wheel hook kept so extracted controllers can stay source-compatible. */
+    /** @deprecated Retained only for binary compatibility; the shape wheel is retired. */
+    @Deprecated
     public void openShapeWheel(double mouseX, double mouseY) {
-    }
-    /** Retired shape-wheel hook kept so existing close paths remain harmless. */
-    private void closeShapeWheel() {
     }
     /** Resolves which interaction option is under the mouse cursor on the interaction wheel. */
     private InteractionTypes.InteractionOption resolveInteractionWheelOption(double mouseX, double mouseY) {
@@ -2320,14 +2327,6 @@ public final class BuilderScreen extends Screen {
     /** Returns true if (mouseX, mouseY) is inside the rectangle (x, y, w, h). */
     private static boolean inside(double mouseX, double mouseY, int x, int y, int w, int h) {
         return mouseX >= x && mouseX <= x + w && mouseY >= y && mouseY <= y + h;
-    }
-    /** Returns a short label string for the given storage sort mode. */
-    private static String sortLabel(RtsStorageSort sort) {
-        return switch (sort) {
-            case QUANTITY -> "Qty";
-            case MOD -> "Mod";
-            case NAME -> "Name";
-        };
     }
     /** Exposes the shape controller for direct access by sub-panels. */
     public ScreenShapeController getShapeController() {

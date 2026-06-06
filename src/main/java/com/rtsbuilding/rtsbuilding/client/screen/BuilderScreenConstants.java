@@ -206,6 +206,14 @@ public final class BuilderScreenConstants {
     // ======================== 杂项 ========================
     /** 漏斗光标使用的物品图标（漏斗） */
     public static final ItemStack FUNNEL_CURSOR_STACK = new ItemStack(net.minecraft.world.item.Items.HOPPER);
+    /** 左侧 Tooltip X 偏移 */
+    public static final int LEFT_TOOLTIP_X_OFFSET = 8;
+    /** 左侧 Tooltip Y 偏移 */
+    public static final int LEFT_TOOLTIP_Y_OFFSET = 24;
+    /** 左侧 Tooltip 详情 Y 偏移 */
+    public static final int LEFT_TOOLTIP_DETAIL_Y_OFFSET = 18;
+    /** 存储链接详情操作按钮高度 */
+    public static final int STORAGE_LINK_DETAIL_ACTION_H = 16;
     /** "全部"分类标记 */
     public static final String CATEGORY_ALL = "all";
     /** Mod 分类前缀 */
