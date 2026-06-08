@@ -249,9 +249,8 @@ public final class ShapeGhostRenderer {
         int total = controller.getUltimineProgressTotal();
         int stage = controller.getMineProgressStage();
         if (processed >= 0 && total > 0) {
-            if (processed >= total) return 1.0F;
-            float currentBlockProgress = stage < 0 ? 0.0F : RenderingUtil.clamp01((Math.min(9, stage) + 1) / 10.0F);
-            return RenderingUtil.clamp01((processed + currentBlockProgress) / (float) total);
+            if (processed > 0) return 1.0F;
+            return stage < 0 ? 0.0F : RenderingUtil.clamp01((Math.min(9, stage) + 1) / 10.0F);
         }
         return stage < 0 ? 0.0F : RenderingUtil.clamp01((Math.min(9, stage) + 1) / 10.0F);
     }
@@ -267,7 +266,7 @@ public final class ShapeGhostRenderer {
         BlockPos progressPos = controller.getMineProgressPos();
         return progressPos != null
                 && previewContains(preview, progressPos)
-                && controller.getUltimineProgressProcessed() >= 0
+                && controller.getUltimineProgressProcessed() > 0
                 && controller.getUltimineProgressTotal() > 0;
     }
 

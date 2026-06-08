@@ -10,7 +10,9 @@ import java.util.Set;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 
+import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.block.state.BlockState;
 
 import com.rtsbuilding.rtsbuilding.client.controller.ClientRtsController;
 import com.rtsbuilding.rtsbuilding.client.rendering.util.RenderingUtil;
@@ -257,6 +259,7 @@ public final class MergedSkeletonRenderer {
         for (Long removedKey : removedKeys) {
             remainingKeys.remove(removedKey);
         }
+        collectNoLongerLiveNeighbourTargets(edgeMap, removedKeys, remainingKeys);
         for (Long removedKey : removedKeys) {
             BlockPos removedPos = BlockPos.of(removedKey);
             addNewlyExposedNeighbourContributions(edgeMap, removedPos, remainingKeys);
@@ -270,6 +273,49 @@ public final class MergedSkeletonRenderer {
                 edgeMap,
                 List.copyOf(visibleEdgeLines(edgeMap)),
                 List.copyOf(fillBlocks));
+    }
+
+    private static void collectNoLongerLiveNeighbourTargets(Map<EdgeKey, EdgeAccumulator> edges,
+            List<Long> removedKeys, Set<Long> remainingKeys) {
+        for (int i = 0; i < removedKeys.size(); i++) {
+            Long removedKey = removedKeys.get(i);
+            if (removedKey == null) {
+                continue;
+            }
+            BlockPos pos = BlockPos.of(removedKey);
+            removeNoLongerLiveTargetIfPresent(edges, removedKeys, remainingKeys, pos.getX() + 1, pos.getY(), pos.getZ());
+            removeNoLongerLiveTargetIfPresent(edges, removedKeys, remainingKeys, pos.getX() - 1, pos.getY(), pos.getZ());
+            removeNoLongerLiveTargetIfPresent(edges, removedKeys, remainingKeys, pos.getX(), pos.getY() + 1, pos.getZ());
+            removeNoLongerLiveTargetIfPresent(edges, removedKeys, remainingKeys, pos.getX(), pos.getY() - 1, pos.getZ());
+            removeNoLongerLiveTargetIfPresent(edges, removedKeys, remainingKeys, pos.getX(), pos.getY(), pos.getZ() + 1);
+            removeNoLongerLiveTargetIfPresent(edges, removedKeys, remainingKeys, pos.getX(), pos.getY(), pos.getZ() - 1);
+        }
+    }
+
+    private static void removeNoLongerLiveTargetIfPresent(Map<EdgeKey, EdgeAccumulator> edges,
+            List<Long> removedKeys, Set<Long> remainingKeys, int x, int y, int z) {
+        long key = BlockPos.asLong(x, y, z);
+        if (!remainingKeys.contains(key)) {
+            return;
+        }
+        BlockPos pos = BlockPos.of(key);
+        if (isLiveDestroyTarget(pos)) {
+            return;
+        }
+        removeBlockSurfaceContributions(edges, pos, remainingKeys);
+        remainingKeys.remove(key);
+        removedKeys.add(key);
+    }
+
+    private static boolean isLiveDestroyTarget(BlockPos pos) {
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft == null || minecraft.level == null || pos == null) {
+            return true;
+        }
+        BlockState state = minecraft.level.getBlockState(pos);
+        return !state.isAir()
+                && state.getFluidState().isEmpty()
+                && state.getDestroySpeed(minecraft.level, pos) >= 0.0F;
     }
 
     // ===== Edge contribution management =====
