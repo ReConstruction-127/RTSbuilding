@@ -15,7 +15,6 @@ import com.rtsbuilding.rtsbuilding.client.rendering.util.RaycastHelper;
 import com.rtsbuilding.rtsbuilding.client.rendering.util.RenderingUtil;
 import com.rtsbuilding.rtsbuilding.client.screen.BuilderScreen;
 import com.rtsbuilding.rtsbuilding.client.screen.shape.ShapeBuildTypes;
-import com.rtsbuilding.rtsbuilding.client.screen.shape.ShapeDataRecords;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -257,10 +256,7 @@ public final class InteractionTargetRenderer {
             return true;
         }
 
-        // Blocked when single block pre-placement ghost is active
-        // The translucent block model overlaps with the corner brackets on the same position.
-        ShapeDataRecords.GhostPreview ghost = builderScreen.getShapeGhostPreview();
-        return ghost != null && ghost.readyConfirm() && !ghost.destructive() && !ghost.blocks().isEmpty();
+        return false;
     }
 
     // ══════════════════════════════════════════════
