@@ -11,6 +11,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 
 import com.rtsbuilding.rtsbuilding.server.RtsStorageManager;
 import com.rtsbuilding.rtsbuilding.server.storage.placement.RtsPlacementBatch;
@@ -76,6 +77,15 @@ public class RtsStorageSession {
 
     /** AE-style linked storage priority. Default 0 keeps old saves and old links neutral. */
     public final Map<LinkedStorageRef, Integer> linkedPriorities = new HashMap<>();
+
+    /** Sophisticated Backpacks content UUID for linked backpack blocks. */
+    public final Map<LinkedStorageRef, UUID> linkedBackpackUuids = new HashMap<>();
+
+    /** Backpack item id used to reopen UUID-backed contents when the block was moved. */
+    public final Map<LinkedStorageRef, String> linkedBackpackItemIds = new HashMap<>();
+
+    /** UUID-backed backpack refs that were just broken and should not render at their old position. */
+    public final Set<LinkedStorageRef> detachedBackpackRefs = new HashSet<>();
 
     // ======================================================================
     // §3  存储浏览器状态

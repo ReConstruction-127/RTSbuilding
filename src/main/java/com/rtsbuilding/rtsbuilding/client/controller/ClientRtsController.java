@@ -1741,6 +1741,8 @@ public final class ClientRtsController {
         int priority = index >= 0 && index < payload.linkedPriorities().size()
                 ? payload.linkedPriorities().get(index)
                 : 0;
+        boolean worldAvailable = index >= 0 && index < payload.linkedWorldAvailable().size()
+                && Boolean.TRUE.equals(payload.linkedWorldAvailable().get(index));
         ItemStack preview = ItemStack.EMPTY;
         String iconItemId = index >= 0 && index < payload.linkedIconItemIds().size()
                 ? payload.linkedIconItemIds().get(index)
@@ -1749,7 +1751,7 @@ public final class ClientRtsController {
         if (iconKey != null && BuiltInRegistries.ITEM.containsKey(iconKey)) {
             preview = new ItemStack(BuiltInRegistries.ITEM.get(iconKey));
         }
-        return new LinkedStorageEntry(pos, label, mode, priority, preview);
+        return new LinkedStorageEntry(pos, label, mode, priority, preview, worldAvailable);
     }
 
     private void markStorageScanStarted() {
@@ -2470,6 +2472,14 @@ public final class ClientRtsController {
         RtsClientPacketGateway.sendInteractBlockWithToolSlot(hit, toolSlot, rayOrigin, rayDir);
     }
 
+    public void useItemInAirWithToolSlot(BlockHitResult hit, int toolSlot, Vec3 rayOrigin, Vec3 rayDir) {
+        if (hit == null) {
+            return;
+        }
+        beginRemoteMenuOpenGrace();
+        RtsClientPacketGateway.sendUseItemInAirWithToolSlot(hit, toolSlot, rayOrigin, rayDir);
+    }
+
     public void interactBlockWithPinnedItem(BlockHitResult hit, String itemId, Vec3 rayOrigin, Vec3 rayDir) {
         if (hit == null || itemId == null || itemId.isBlank()) {
             return;
@@ -3064,7 +3074,8 @@ public final class ClientRtsController {
      * still valid storage or whether unlink is allowed; those rules stay on the
      * server.
      */
-    public record LinkedStorageEntry(BlockPos pos, String label, byte mode, int priority, ItemStack preview) {
+    public record LinkedStorageEntry(BlockPos pos, String label, byte mode, int priority, ItemStack preview,
+            boolean worldAvailable) {
     }
 
     public record FluidEntry(

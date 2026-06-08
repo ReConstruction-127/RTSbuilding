@@ -335,6 +335,7 @@
   "screen.rtsbuilding.storage_links.empty": "No linked storage",
   "screen.rtsbuilding.storage_links.empty_detail": "Use Storage Link, then left-click a storage block.",
   "screen.rtsbuilding.storage_links.priority": "Priority",
+  "screen.rtsbuilding.storage_links.position_na": "N/A",
   "screen.rtsbuilding.storage_links.mode_both": "Insert + Extract",
   "screen.rtsbuilding.storage_links.mode_extract": "Extract only",
   "screen.rtsbuilding.storage_links.unlink": "Unlink",

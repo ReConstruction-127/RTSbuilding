@@ -131,7 +131,7 @@ public final class LinkedStoragePanel extends RtsWindowPanel {
         String name = RtsClientUiUtil.trimToWidth(this.screen.font(), entry.label(),
                 Math.max(30, priorityX - (x + 26) - 6));
         g.drawString(this.screen.font(), name, x + 26, y + 4, 0xFFEAF2FF, false);
-        g.drawString(this.screen.font(), formatPos(entry.pos()), x + 26, y + 15, 0xFF9FB3C8, false);
+        g.drawString(this.screen.font(), formatPos(entry), x + 26, y + 15, 0xFF9FB3C8, false);
 
         renderPriorityControl(g, mouseX, mouseY, entry, priorityX, priorityY);
         renderExtractToggle(g, mouseX, mouseY, entry, extractX, priorityY);
@@ -392,7 +392,11 @@ public final class LinkedStoragePanel extends RtsWindowPanel {
         return rowY + 7;
     }
 
-    private static String formatPos(BlockPos pos) {
+    private static String formatPos(ClientRtsController.LinkedStorageEntry entry) {
+        if (entry == null || !entry.worldAvailable()) {
+            return Component.translatable("screen.rtsbuilding.storage_links.position_na").getString();
+        }
+        BlockPos pos = entry.pos();
         if (pos == null) {
             return "? ? ?";
         }

@@ -335,6 +335,7 @@
   "screen.rtsbuilding.storage_links.empty": "目前沒有綁定存儲",
   "screen.rtsbuilding.storage_links.empty_detail": "使用存儲綁定，然後左鍵點擊存儲方塊。",
   "screen.rtsbuilding.storage_links.priority": "優先級",
+  "screen.rtsbuilding.storage_links.position_na": "N/A",
   "screen.rtsbuilding.storage_links.mode_both": "存取",
   "screen.rtsbuilding.storage_links.mode_extract": "僅提取",
   "screen.rtsbuilding.storage_links.unlink": "解除",
