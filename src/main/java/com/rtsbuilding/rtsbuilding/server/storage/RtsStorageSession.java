@@ -183,6 +183,8 @@ public class RtsStorageSession {
     public int miningToolSlot;
     /** 当前借用的远程挖掘工具租约（RtsToolLease 封装工具栈和来源信息） */
     public RtsToolLease miningToolLease = RtsToolLease.empty();
+    /** True when a non-block RTS selected item must be used instead of silently falling back to the hotbar. */
+    public boolean miningSelectedToolRequested;
     /** 当前挖掘进度[0.0, 1.0]，服务端按 tick 递增 */
     public float miningProgress;
     /** 当前破坏阶段索引；-1 = 尚未开始 */

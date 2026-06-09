@@ -17,6 +17,7 @@ import com.rtsbuilding.rtsbuilding.progression.RtsProgressionNodes;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.util.Mth;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
@@ -53,7 +54,8 @@ public final class QuickBuildPanel extends RtsWindowPanel {
     private static final int QUICK_BUILD_PANEL_MIN_H = 184;
 
     /** 底部提示文字区域额外高度 */
-    private static final int BOTTOM_INFO_H = 30;
+    private static final int BOTTOM_INFO_H = 52;
+    private static final int BOTTOM_TEXT_MAX_LINES = 3;
 
     /** 选择指示器贴图 */
     private static final ResourceLocation SELECTION_DOT_TEXTURE =
@@ -508,16 +510,15 @@ public final class QuickBuildPanel extends RtsWindowPanel {
             renderProgressStrip(g, x, dividerY);
 
             // 扩展区域中心线
-            int centerY = dividerY + BOTTOM_INFO_H / 2;
-            int textY = centerY - screen.font().lineHeight / 2 + 6;
-            int itemY = centerY - 8;
+            int textY = dividerY + 12;
+            int itemY = textY - 4;
 
             if (effectiveMode() == QuickBuildMode.DESTROY) {
                 String hintKey = isRangeDestroyChainMode()
                         ? "screen.rtsbuilding.quick_build.chain_hint"
                         : "screen.rtsbuilding.quick_build.destroy_hint";
-                g.drawString(screen.font(), screen.text(hintKey),
-                        x + 8, textY, 0xFFB8B8, false);
+                renderBottomInfoText(g, Component.translatable(hintKey),
+                        x + 8, textY, this.windowWidth - 16, 0xFFB8B8);
                 return;
             }
 
@@ -560,6 +561,14 @@ public final class QuickBuildPanel extends RtsWindowPanel {
                     }
                 }
             }
+        }
+    }
+
+    private void renderBottomInfoText(GuiGraphics g, Component text, int x, int y, int maxWidth, int color) {
+        List<FormattedCharSequence> lines = screen.font().split(text, Math.max(1, maxWidth));
+        int lineCount = Math.min(BOTTOM_TEXT_MAX_LINES, lines.size());
+        for (int i = 0; i < lineCount; i++) {
+            g.drawString(screen.font(), lines.get(i), x, y + i * screen.font().lineHeight, color, false);
         }
     }
 

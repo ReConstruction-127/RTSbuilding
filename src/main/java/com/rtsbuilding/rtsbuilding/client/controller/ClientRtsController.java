@@ -2845,7 +2845,12 @@ public final class ClientRtsController {
     }
 
     private String selectedMiningToolItemId() {
-        return selectedMiningToolPrototype().isEmpty() ? "" : this.selectedItemId;
+        ItemStack prototype = selectedMiningToolPrototype();
+        if (prototype.isEmpty()) {
+            return "";
+        }
+        ResourceLocation id = BuiltInRegistries.ITEM.getKey(prototype.getItem());
+        return id == null ? "" : id.toString();
     }
 
     private ItemStack selectedMiningToolPrototype() {
