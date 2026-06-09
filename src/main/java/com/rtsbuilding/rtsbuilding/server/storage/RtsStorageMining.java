@@ -792,6 +792,10 @@ public final class RtsStorageMining {
         ServerLevel level = player.serverLevel();
         int processedThisTick = 0;
         while (processedThisTick < ULTIMINE_BLOCKS_PER_TICK && !session.ultimineTargets.isEmpty()) {
+            if (isToolNearBreak(player, session)) {
+                finishUltimineBatch(player, session);
+                return;
+            }
             BlockPos target = session.ultimineTargets.removeFirst();
             processedThisTick++;
             session.ultimineProcessedTargets++;
@@ -812,8 +816,9 @@ public final class RtsStorageMining {
             if (targetBroken && canAutoStoreDrops(player, session)) {
                 session.ultimineAbsorbedDrops |= absorbNearbyMinedDrops(player, target, session);
             }
-            if (targetBroken && isToolNearBreak(session)) {
-                break;
+            if (targetBroken && isToolNearBreak(player, session)) {
+                finishUltimineBatch(player, session);
+                return;
             }
         }
 
@@ -1351,13 +1356,35 @@ public final class RtsStorageMining {
                 && RtsProgressionManager.canUse(player, RtsFeature.AUTO_STORE_MINED_DROPS);
     }
 
-    private static boolean isToolNearBreak(RtsStorageSession session) {
-        if (session == null || session.miningToolLease == null || session.miningToolLease.isEmpty()) {
+    private static boolean isToolNearBreak(ServerPlayer player, RtsStorageSession session) {
+        ItemStack tool = activeMiningTool(player, session);
+        if (tool.isEmpty() || !tool.isDamageableItem()) {
             return false;
         }
-        ItemStack tool = session.miningToolLease.stack();
-        return tool.isDamageableItem()
-                && tool.getDamageValue() >= tool.getMaxDamage() - 1;
+        int maxDamage = tool.getMaxDamage();
+        if (maxDamage <= 0) {
+            return false;
+        }
+        int remaining = maxDamage - tool.getDamageValue();
+        int threshold = Math.max(1, (int) Math.ceil(maxDamage * 0.05D));
+        return remaining <= threshold;
+    }
+
+    private static ItemStack activeMiningTool(ServerPlayer player, RtsStorageSession session) {
+        if (session == null) {
+            return ItemStack.EMPTY;
+        }
+        if (session.miningToolLease != null && !session.miningToolLease.isEmpty()) {
+            return session.miningToolLease.stack();
+        }
+        if (player == null) {
+            return ItemStack.EMPTY;
+        }
+        int slot = clampHotbarSlot(session.miningToolSlot);
+        if (slot < 0 || slot >= player.getInventory().getContainerSize()) {
+            return ItemStack.EMPTY;
+        }
+        return player.getInventory().getItem(slot);
     }
 
     /** Outcome of destroying a block with a temporary main-hand tool. */
