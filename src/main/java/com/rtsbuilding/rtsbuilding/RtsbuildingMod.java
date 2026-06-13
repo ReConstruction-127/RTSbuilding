@@ -132,11 +132,6 @@ public class RtsbuildingMod {
         }
 
         @SubscribeEvent
-        static void onRegisterCommands(RegisterCommandsEvent event) {
-            com.rtsbuilding.rtsbuilding.server.service.RtsBenchmarkCommand.register(event.getDispatcher());
-        }
-
-        @SubscribeEvent
         static void onServerTick(ServerTickEvent.Post event) {
             RtsSessionService.tickMining(event.getServer());
         }

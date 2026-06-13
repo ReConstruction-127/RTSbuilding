@@ -124,6 +124,50 @@ tasks.named('test', Test).configure {
     useJUnitPlatform()
     testLogging {
         events "passed", "skipped", "failed"
+        showStandardStreams = true
+    }
+}
+
+// ======================================================================
+//  Benchmark 自动化任务 — 执行极限性能测试并生成 benchmark-results.txt
+// ======================================================================
+
+tasks.register('generateBenchmarkReport') {
+    group = 'benchmark'
+    description = '执行极限性能测试并生成 benchmark-results.txt'
+    dependsOn 'cleanTest'
+    doLast {
+        println '正在执行 Benchmark 测试...'
+    }
+    finalizedBy 'runBenchmarks'
+}
+
+tasks.register('runBenchmarks', Test) {
+    group = 'benchmark'
+    description = '内部任务 — 执行 benchmark 测试'
+    useJUnitPlatform()
+
+    // ⚠️ 必须显式指定测试类路径，否则自定义 Test task 找不到测试类！
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+
+    filter {
+        includeTestsMatching '*RtsPageCacheBenchmark'
+        includeTestsMatching '*RtsHandlerCacheBenchmark'
+        includeTestsMatching '*RtsLinkedStorageResolverBenchmark'
+        includeTestsMatching '*RtsAggregateStorageBenchmark'
+    }
+    testLogging {
+        events "passed", "skipped", "failed"
+        showStandardStreams = true
+    }
+    outputs.upToDateWhen { false }
+    doLast {
+        println ''
+        println '===================================================='
+        println '  Benchmark 测试完成！'
+        println '  结果已自动写入: benchmark-results.txt'
+        println '===================================================='
     }
 }
 

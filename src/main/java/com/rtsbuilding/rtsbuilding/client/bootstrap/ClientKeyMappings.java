@@ -9,7 +9,7 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
 import org.lwjgl.glfw.GLFW;
 
-@EventBusSubscriber(modid = RtsbuildingMod.MODID, value = Dist.CLIENT, bus = EventBusSubscriber.Bus.MOD)
+@EventBusSubscriber(modid = RtsbuildingMod.MODID, value = Dist.CLIENT)
 public final class ClientKeyMappings {
     public static final KeyMapping TOGGLE_RTS = new KeyMapping(
             "key.rtsbuilding.toggle_rts",
