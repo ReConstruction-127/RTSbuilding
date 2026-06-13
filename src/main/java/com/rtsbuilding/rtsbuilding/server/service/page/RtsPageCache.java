@@ -34,7 +34,7 @@ public final class RtsPageCache {
      * Package-private constructor — external code should use {@link #INSTANCE}.
      * Tests in the same package may create independent instances.
      */
-    RtsPageCache() {
+    public RtsPageCache() {
     }
 
     /**

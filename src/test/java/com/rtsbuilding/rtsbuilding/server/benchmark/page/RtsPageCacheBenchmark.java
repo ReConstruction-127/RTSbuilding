@@ -1,32 +1,72 @@
-package com.rtsbuilding.rtsbuilding.server.service.page;
+package com.rtsbuilding.rtsbuilding.server.benchmark.page;
 
 import com.rtsbuilding.rtsbuilding.network.storage.RtsStorageSort;
-import com.rtsbuilding.rtsbuilding.server.benchmark.BenchmarkReporter;
-import org.junit.jupiter.api.*;
+import com.rtsbuilding.rtsbuilding.server.service.page.RtsPageCache;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
- * 极限性能测试 / Extreme Performance Benchmarks for {@link RtsPageCache}.
+ * Extreme Performance Benchmarks for {@link RtsPageCache}.
  *
  * <p>Focuses on LRU eviction overhead, hash-table lookup degradation at
  * max capacity, large {@link RtsPageCache.CachedPage} data handling, and
- * mixed workloads. Results are printed to stdout in a structured format.</p>
- *
- * <p>All benchmarks avoid {@code ItemStack} to run in a plain unit-test
- * environment without a bootstrapped Minecraft runtime.</p>
+ * mixed workloads. All benchmarks avoid {@code ItemStack} to run in a plain
+ * unit-test environment without a bootstrapped Minecraft runtime.</p>
  */
 class RtsPageCacheBenchmark {
 
     private static final int WARMUP = 3;
     private static final int ITERATIONS = 10;
-    private static final int MAX_CAPACITY = 256;
+    private static final int MAX_ENTRIES = 256;
 
     private RtsPageCache cache;
 
+    /**
+     * Global JIT warmup — runs once before all tests. Exercises all code paths
+     * so the JIT compiler compiles them before measurement begins.
+     */
+    @BeforeAll
+    static void globalWarmUp() {
+        RtsPageCache c = new RtsPageCache();
+
+        // Warm up LRU eviction path (moderate, avoid excessive memory)
+        for (int w = 0; w < WARMUP; w++) {
+            for (int i = 0; i < MAX_ENTRIES + 500; i++) {
+                c.put(UUID.randomUUID(), createEmptyPage(i));
+            }
+            c.clear();
+        }
+
+        // Warm up get path with a full cache
+        UUID[] keys = new UUID[MAX_ENTRIES];
+        for (int i = 0; i < MAX_ENTRIES; i++) {
+            keys[i] = UUID.randomUUID();
+            c.put(keys[i], createEmptyPage(i));
+        }
+        for (int i = 0; i < 3_000; i++) {
+            c.get(keys[i % MAX_ENTRIES]);
+            c.get(UUID.randomUUID()); // miss path
+        }
+
+        // Warm up remove path
+        c.clear();
+        for (int i = 0; i < MAX_ENTRIES; i++) {
+            c.put(UUID.randomUUID(), createEmptyPage(i));
+        }
+        for (int i = 0; i < MAX_ENTRIES; i++) {
+            c.remove(keys[i]);
+        }
+        c.clear();
+    }
+
     @BeforeEach
     void setUp() {
+        System.gc();
         cache = new RtsPageCache();
     }
 
@@ -37,29 +77,24 @@ class RtsPageCacheBenchmark {
 
     // ======================================================================
     //  Section 1: LRU eviction throughput at max capacity
-    //  Simulates 256 concurrent players, then extra players trigger eviction.
     // ======================================================================
 
     @Test
     void benchmarkLruEvictionAtMaxCapacity() {
         int extraPuts = 5000;
 
-        // Warmup
         for (int w = 0; w < WARMUP; w++) {
-            runLruBench(MAX_CAPACITY, extraPuts);
+            runLruBench(MAX_ENTRIES, extraPuts);
         }
 
-        // Measure
-        long totalNanos = 0L;
-        long totalOps = (long) MAX_CAPACITY + extraPuts;
+        long totalTotalNanos = 0L;
+        long totalOps = (long) MAX_ENTRIES + extraPuts;
         for (int i = 0; i < ITERATIONS; i++) {
-            totalNanos += runLruBench(MAX_CAPACITY, extraPuts);
+            totalTotalNanos += runLruBench(MAX_ENTRIES, extraPuts);
         }
-        long avgNanos = totalNanos / ITERATIONS;
-        double opsPerSec = (double) totalOps / avgNanos * 1_000_000_000.0;
-
-        BenchmarkReporter.record("[RtsPageCache] LRU eviction @ max cap (%d): put %,d total ops \u2192 avg %d ns/op  (%,.0f ops/sec)",
-                MAX_CAPACITY, totalOps, avgNanos, opsPerSec);
+        long avgNanos = totalTotalNanos / ITERATIONS;
+        System.out.println(String.format("[RtsPageCache] LRU eviction @ max cap (%d): put %,d total ops \u2192 avg %,d ns/op  (%,.0f ops/sec)",
+                MAX_ENTRIES, totalOps, avgNanos, 1_000_000_000.0 / avgNanos));
     }
 
     private long runLruBench(int capacity, int extraPuts) {
@@ -77,22 +112,20 @@ class RtsPageCacheBenchmark {
 
     // ======================================================================
     //  Section 2: sequential get() under full cache
-    //  Measures LinkedHashMap access-order iterator overhead on repeated get().
     // ======================================================================
 
     @Test
     void benchmarkSequentialGetUnderFullCache() {
-        int lookups = 100_000;
+        int LOOKUPS = 100_000;
 
-        UUID[] keys = new UUID[MAX_CAPACITY];
-        for (int i = 0; i < MAX_CAPACITY; i++) {
+        UUID[] keys = new UUID[MAX_ENTRIES];
+        for (int i = 0; i < MAX_ENTRIES; i++) {
             keys[i] = UUID.randomUUID();
             cache.put(keys[i], createEmptyPage(i));
         }
 
-        // Warmup
         for (int w = 0; w < WARMUP; w++) {
-            for (int i = 0; i < lookups / MAX_CAPACITY; i++) {
+            for (int i = 0; i < LOOKUPS / MAX_ENTRIES; i++) {
                 for (UUID key : keys) {
                     cache.get(key);
                 }
@@ -100,74 +133,67 @@ class RtsPageCacheBenchmark {
         }
 
         long start = System.nanoTime();
-        for (int i = 0; i < lookups; i++) {
-            cache.get(keys[i % MAX_CAPACITY]);
+        for (int i = 0; i < LOOKUPS; i++) {
+            cache.get(keys[i % MAX_ENTRIES]);
         }
         long end = System.nanoTime();
-        long avgNanos = (end - start) / lookups;
-
-        BenchmarkReporter.record("[RtsPageCache] sequential get() @ full cache: %,d lookups \u2192 avg %d ns/op  (%,.0f ops/sec)",
-                lookups, avgNanos, 1_000_000_000.0 / avgNanos);
+        long avgNanos = (end - start) / LOOKUPS;
+        System.out.println(String.format("[RtsPageCache] sequential get() @ full cache: %,d lookups \u2192 avg %,d ns/op  (%,.0f ops/sec)",
+                LOOKUPS, avgNanos, 1_000_000_000.0 / avgNanos));
     }
 
     // ======================================================================
-    //  Section 3: random UUID miss (cache miss every time)
-    //  Worst-case: every get() generates a new random UUID that doesn't exist.
+    //  Section 3: random UUID miss
     // ======================================================================
 
     @Test
     void benchmarkRandomLookupMiss() {
-        int lookups = 100_000;
+        int LOOKUPS = 100_000;
 
-        // Fill cache so it's not empty
-        for (int i = 0; i < MAX_CAPACITY; i++) {
+        for (int i = 0; i < MAX_ENTRIES; i++) {
             cache.put(UUID.randomUUID(), createEmptyPage(i));
         }
 
-        // Warmup
         for (int w = 0; w < WARMUP; w++) {
-            for (int i = 0; i < lookups / 10; i++) {
+            for (int i = 0; i < LOOKUPS / 10; i++) {
                 cache.get(UUID.randomUUID());
             }
         }
 
         long start = System.nanoTime();
-        for (int i = 0; i < lookups; i++) {
+        for (int i = 0; i < LOOKUPS; i++) {
             cache.get(UUID.randomUUID());
         }
         long end = System.nanoTime();
-        long avgNanos = (end - start) / lookups;
-
-        BenchmarkReporter.record("[RtsPageCache] random UUID miss: %,d lookups \u2192 avg %d ns/op  (%,.0f ops/sec)",
-                lookups, avgNanos, 1_000_000_000.0 / avgNanos);
+        long avgNanos = (end - start) / LOOKUPS;
+        System.out.println(String.format("[RtsPageCache] random UUID miss: %,d lookups \u2192 avg %,d ns/op  (%,.0f ops/sec)",
+                LOOKUPS, avgNanos, 1_000_000_000.0 / avgNanos));
     }
 
     // ======================================================================
     //  Section 4: large CachedPage — put/get with 10K-item counts map
-    //  Simulates a player with hundreds of thousands of items in storage.
     // ======================================================================
 
     @Test
     void benchmarkLargeCachedPagePutGet() {
         int pageCount = 50;
-        int mapSize = 10_000;
+        int MAP_SIZE = 10_000;
 
-        // Warmup
         for (int w = 0; w < WARMUP; w++) {
-            runLargePageBench(pageCount, mapSize);
+            runLargePageBench(pageCount, MAP_SIZE);
         }
 
         long totalPut = 0L, totalGet = 0L;
         for (int i = 0; i < ITERATIONS; i++) {
-            long[] r = runLargePageBench(pageCount, mapSize);
+            long[] r = runLargePageBench(pageCount, MAP_SIZE);
             totalPut += r[0];
             totalGet += r[1];
         }
-        long avgPutNanos = totalPut / ITERATIONS / pageCount;
-        long avgGetNanos = totalGet / ITERATIONS / pageCount;
+        long putAvgNanos = totalPut / ITERATIONS / pageCount;
+        long getAvgNanos = totalGet / ITERATIONS / pageCount;
 
-        BenchmarkReporter.record("[RtsPageCache] large CachedPage (%,d map entries): put avg %d ns/op, get avg %d ns/op",
-                mapSize, avgPutNanos, avgGetNanos);
+        System.out.println(String.format("[RtsPageCache] large CachedPage (%,d map entries): put avg %,d ns/op, get avg %,d ns/op",
+                MAP_SIZE, putAvgNanos, getAvgNanos));
     }
 
     private long[] runLargePageBench(int count, int mapSize) {
@@ -193,25 +219,28 @@ class RtsPageCacheBenchmark {
 
     // ======================================================================
     //  Section 5: mixed workload — put/get/remove interleaved
-    //  Simulates real-world usage: players joining/leaving, cache churn.
+    //  Now runs ITERATIONS times for stability.
     // ======================================================================
 
     @Test
     void benchmarkMixedWorkload() {
-        int ops = 50_000;
+        int OPS_PER_ITER = 50_000;
 
-        // Warmup
         for (int w = 0; w < WARMUP; w++) {
-            runMixedBench(ops);
+            runMixedBench(OPS_PER_ITER);
         }
 
-        long start = System.nanoTime();
-        runMixedBench(ops);
-        long end = System.nanoTime();
-        long avgNanos = (end - start) / ops;
+        long totalNanos = 0;
+        for (int iter = 0; iter < ITERATIONS; iter++) {
+            long start = System.nanoTime();
+            runMixedBench(OPS_PER_ITER);
+            long end = System.nanoTime();
+            totalNanos += (end - start);
+        }
+        long avgNanos = totalNanos / ITERATIONS / OPS_PER_ITER;
 
-        BenchmarkReporter.record("[RtsPageCache] mixed workload (put+get+remove): %,d ops \u2192 avg %d ns/op  (%,.0f ops/sec)",
-                ops, avgNanos, 1_000_000_000.0 / avgNanos);
+        System.out.println(String.format("[RtsPageCache] mixed workload (put+get+remove): %,d ops \u00d7 %d iters \u2192 avg %,d ns/op  (%,.0f ops/sec)",
+                OPS_PER_ITER, ITERATIONS, avgNanos, 1_000_000_000.0 / avgNanos));
     }
 
     private void runMixedBench(int ops) {
@@ -233,28 +262,39 @@ class RtsPageCacheBenchmark {
 
     @Test
     void benchmarkRemoveUnderFullCache() {
-        int removes = 10_000;
+        int COUNT = 10_000;
 
-        // Fill then measure
+        for (int w = 0; w < WARMUP; w++) {
+            UUID[] keys = new UUID[COUNT];
+            for (int j = 0; j < COUNT; j++) {
+                keys[j] = UUID.randomUUID();
+                cache.put(keys[j], createEmptyPage(j));
+            }
+            for (int j = 0; j < COUNT; j++) {
+                cache.remove(keys[j]);
+            }
+            cache.clear();
+        }
+
         long totalNanos = 0L;
         for (int i = 0; i < ITERATIONS; i++) {
-            UUID[] keys = new UUID[removes];
-            for (int j = 0; j < removes; j++) {
+            UUID[] keys = new UUID[COUNT];
+            for (int j = 0; j < COUNT; j++) {
                 keys[j] = UUID.randomUUID();
                 cache.put(keys[j], createEmptyPage(j));
             }
             long start = System.nanoTime();
-            for (int j = 0; j < removes; j++) {
+            for (int j = 0; j < COUNT; j++) {
                 cache.remove(keys[j]);
             }
             long end = System.nanoTime();
             totalNanos += (end - start);
             cache.clear();
         }
-        long avgNanos = totalNanos / ITERATIONS / removes;
+        long avgNanos = totalNanos / ITERATIONS / COUNT;
 
-        BenchmarkReporter.record("[RtsPageCache] remove() \u00d7 %,d: avg %d ns/op  (%,.0f ops/sec)",
-                removes, avgNanos, 1_000_000_000.0 / avgNanos);
+        System.out.println(String.format("[RtsPageCache] remove() \u00d7 %,d: avg %,d ns/op  (%,.0f ops/sec)",
+                COUNT, avgNanos, 1_000_000_000.0 / avgNanos));
     }
 
     // ======================================================================
@@ -263,9 +303,16 @@ class RtsPageCacheBenchmark {
 
     @Test
     void benchmarkClear() {
+        for (int w = 0; w < WARMUP; w++) {
+            for (int j = 0; j < MAX_ENTRIES; j++) {
+                cache.put(UUID.randomUUID(), createEmptyPage(j));
+            }
+            cache.clear();
+        }
+
         long totalNanos = 0L;
         for (int i = 0; i < ITERATIONS; i++) {
-            for (int j = 0; j < MAX_CAPACITY; j++) {
+            for (int j = 0; j < MAX_ENTRIES; j++) {
                 cache.put(UUID.randomUUID(), createEmptyPage(j));
             }
             long start = System.nanoTime();
@@ -275,7 +322,7 @@ class RtsPageCacheBenchmark {
         }
         long avgNanos = totalNanos / ITERATIONS;
 
-        BenchmarkReporter.record("[RtsPageCache] clear() @ full cache: avg %d ns/op", avgNanos);
+        System.out.println(String.format("[RtsPageCache] clear() @ full cache: avg %,d ns/op", avgNanos));
     }
 
     // ======================================================================
@@ -287,10 +334,10 @@ class RtsPageCacheBenchmark {
                 "", RtsStorageSort.NAME, "all", true, 90, false, false);
         return new RtsPageCache.CachedPage(
                 key, dataVersion,
-                List.of(),           // sortedEntries — empty, no ItemStack
-                List.of(),           // sortedFluidEntries
-                Map.of(),            // counts
-                Map.of(),            // namespaceTotals
+                List.of(),
+                List.of(),
+                Map.of(),
+                Map.of(),
                 List.of("all"));
     }
 

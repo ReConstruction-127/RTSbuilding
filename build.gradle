@@ -13,6 +13,7 @@ version = mod_version
 group = mod_group_id
 
 repositories {
+    mavenCentral()
     maven { url = 'https://maven.blamejared.com' }
     maven { url = 'https://maven.createmod.net' }
     maven { url = 'https://maven.ithundxr.dev/snapshots' }
@@ -114,6 +115,13 @@ dependencies {
     testImplementation "org.mockito:mockito-junit-jupiter:5.12.0"
     testRuntimeOnly "org.junit.platform:junit-platform-launcher:1.11.0"
     testImplementation "net.neoforged:neoforge:${neo_version}"
+
+    // ── JMH for microbenchmarks ──
+    testImplementation 'org.openjdk.jmh:jmh-core:1.37'
+    testAnnotationProcessor 'org.openjdk.jmh:jmh-generator-annprocess:1.37'
+
+    // ── SQLite for benchmark data persistence ──
+    testImplementation 'org.xerial:sqlite-jdbc:3.46.0.0'
 }
 
 // ======================================================================
@@ -128,47 +136,47 @@ tasks.named('test', Test).configure {
     }
 }
 
-// ======================================================================
-//  Benchmark 自动化任务 — 执行极限性能测试并生成 benchmark-results.txt
-// ======================================================================
-
 tasks.register('generateBenchmarkReport') {
     group = 'benchmark'
-    description = '执行极限性能测试并生成 benchmark-results.txt'
+    description = 'Run extreme performance benchmarks and generate benchmark-results.txt'
     dependsOn 'cleanTest'
     doLast {
-        println '正在执行 Benchmark 测试...'
+        println 'Running Benchmark tests...'
     }
     finalizedBy 'runBenchmarks'
 }
 
 tasks.register('runBenchmarks', Test) {
     group = 'benchmark'
-    description = '内部任务 — 执行 benchmark 测试'
+    description = 'Internal task — run benchmark tests'
     useJUnitPlatform()
 
-    // ⚠️ 必须显式指定测试类路径，否则自定义 Test task 找不到测试类！
     testClassesDirs = sourceSets.test.output.classesDirs
     classpath = sourceSets.test.runtimeClasspath
 
     filter {
-        includeTestsMatching '*RtsPageCacheBenchmark'
-        includeTestsMatching '*RtsHandlerCacheBenchmark'
-        includeTestsMatching '*RtsLinkedStorageResolverBenchmark'
-        includeTestsMatching '*RtsAggregateStorageBenchmark'
+        includeTestsMatching '*JmhBenchmarkRunner'
     }
     testLogging {
         events "passed", "skipped", "failed"
         showStandardStreams = true
     }
     outputs.upToDateWhen { false }
-    doLast {
-        println ''
-        println '===================================================='
-        println '  Benchmark 测试完成！'
-        println '  结果已自动写入: benchmark-results.txt'
-        println '===================================================='
-    }
+}
+
+tasks.register('startBenchmarkServer', JavaExec) {
+    group = 'benchmark'
+    description = 'Start the Benchmark data HTTP server'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.rtsbuilding.rtsbuilding.server.benchmark.infrastructure.BenchmarkServer'
+}
+
+tasks.register('resetBenchmarkData', JavaExec) {
+    group = 'benchmark'
+    description = 'Delete ALL benchmark data from the SQLite database'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.rtsbuilding.rtsbuilding.server.benchmark.infrastructure.BenchmarkDatabase'
+    args 'reset'
 }
 
 var generateModMetadata = tasks.register("generateModMetadata", ProcessResources) {
