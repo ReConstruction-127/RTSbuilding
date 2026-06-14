@@ -67,9 +67,6 @@ neoForge {
         "${mod_id}" {
             sourceSet(sourceSets.main)
         }
-        "${mod_id}_test" {
-            sourceSet(sourceSets.test)
-        }
     }
 }
 

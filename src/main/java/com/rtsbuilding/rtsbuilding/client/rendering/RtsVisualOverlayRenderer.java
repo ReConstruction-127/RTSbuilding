@@ -15,6 +15,7 @@ import com.rtsbuilding.rtsbuilding.client.rendering.overlay.StorageRenderer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.RenderStateShard;
 import net.minecraft.client.renderer.RenderType;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -81,6 +82,10 @@ public final class RtsVisualOverlayRenderer {
                     .setCullState(RenderStateShard.NO_CULL)
                     .createCompositeState(false));
 
+    /** World border style barrier for the RTS build boundary, using a custom striped texture */
+    private static final RenderType BOUNDARY_BARRIER = RenderType.entityTranslucent(
+            ResourceLocation.fromNamespaceAndPath(RtsbuildingMod.MODID, "textures/misc/barrier.png"));
+
     private static final RenderType LINES = RenderType.lines();
     private static final RenderType FILLED_BOX = RenderType.debugFilledBox();
 
@@ -92,6 +97,7 @@ public final class RtsVisualOverlayRenderer {
     private static final ByteBufferBuilder FILL_BACKING = new ByteBufferBuilder(FILLED_BOX.bufferSize());
     private static final ByteBufferBuilder BRACKET_BACKING = new ByteBufferBuilder(BRACKET_QUADS.bufferSize());
     private static final ByteBufferBuilder TARGET_NO_DEPTH_BACKING = new ByteBufferBuilder(TARGET_NO_DEPTH_QUADS.bufferSize());
+    private static final ByteBufferBuilder BOUNDARY_BARRIER_BACKING = new ByteBufferBuilder(BOUNDARY_BARRIER.bufferSize());
 
     private RtsVisualOverlayRenderer() {}
 
@@ -126,7 +132,9 @@ public final class RtsVisualOverlayRenderer {
             BufferBuilder bracketBuffer = bufferFor(BRACKET_QUADS, BRACKET_BACKING);
             BufferBuilder targetNoDepthBuffer = bufferFor(TARGET_NO_DEPTH_QUADS, TARGET_NO_DEPTH_BACKING);
 
-            BoundaryLineRenderer.renderRedBoundary(poseStack, lineBuffer, minX, minZ, maxX, maxZ, ay);
+            BufferBuilder barrierBuffer = bufferFor(BOUNDARY_BARRIER, BOUNDARY_BARRIER_BACKING);
+
+            BoundaryLineRenderer.renderBarrierBoundary(poseStack, barrierBuffer, minX, minZ, maxX, maxZ, ay, minecraft.level);
             StorageRenderer.renderLinkedStorages(minecraft, controller, poseStack, bracketBuffer);
             InteractionTargetRenderer.renderHoveredInteractionTarget(minecraft, controller, poseStack, bracketBuffer, targetNoDepthBuffer);
             ShapeGhostRenderer.renderShapeGhostPreview(minecraft, poseStack, lineBuffer, fillBuffer);
@@ -134,6 +142,7 @@ public final class RtsVisualOverlayRenderer {
             BlueprintGhostRenderer.renderBlueprintGhostPreview(minecraft, poseStack, lineBuffer, fillBuffer);
             PlacementAnimationRenderer.render(minecraft, poseStack, lineBuffer, fillBuffer);
 
+            drawIfNotEmpty(BOUNDARY_BARRIER, barrierBuffer);
             drawIfNotEmpty(LINES, lineBuffer);
             drawIfNotEmpty(FILLED_BOX, fillBuffer);
             drawBrackets(bracketBuffer);
