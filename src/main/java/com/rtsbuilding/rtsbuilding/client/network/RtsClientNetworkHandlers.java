@@ -6,6 +6,8 @@ import com.rtsbuilding.rtsbuilding.client.rendering.animation.ClientFakeAirBlock
 import com.rtsbuilding.rtsbuilding.client.rendering.animation.PlacementAnimationRenderer;
 import com.rtsbuilding.rtsbuilding.client.rendering.builder.ShapeGhostRenderer;
 import com.rtsbuilding.rtsbuilding.client.screen.handler.PlacementHistoryManager;
+import com.rtsbuilding.rtsbuilding.client.screen.standalone.BuilderScreen;
+import com.rtsbuilding.rtsbuilding.client.screen.workflow.RtsResumePlacementPanel;
 import com.rtsbuilding.rtsbuilding.network.builder.*;
 import com.rtsbuilding.rtsbuilding.network.camera.S2CRtsCameraAnchorPayload;
 import com.rtsbuilding.rtsbuilding.network.camera.S2CRtsCameraStatePayload;
@@ -17,6 +19,7 @@ import com.rtsbuilding.rtsbuilding.network.progression.S2CRtsQuestDetectStatusPa
 import com.rtsbuilding.rtsbuilding.network.storage.S2CRtsRemoteMenuHintPayload;
 import com.rtsbuilding.rtsbuilding.network.storage.S2CRtsStorageDirtyPayload;
 import com.rtsbuilding.rtsbuilding.network.storage.S2CRtsStoragePagePayload;
+import net.minecraft.client.Minecraft;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
 public final class RtsClientNetworkHandlers {
@@ -87,5 +90,25 @@ public final class RtsClientNetworkHandlers {
 
     public static void handleHistorySync(S2CRtsHistorySyncPayload payload, IPayloadContext context) {
         context.enqueueWork(() -> PlacementHistoryManager.syncHistoryState(payload.undoSize()));
+    }
+
+    public static void handleWorkflowProgress(S2CRtsWorkflowProgressPayload payload, IPayloadContext context) {
+        context.enqueueWork(() -> ClientRtsController.get().applyWorkflowProgress(payload));
+    }
+
+    public static void handleWorkflowProgressBatch(S2CRtsWorkflowProgressBatchPayload payload, IPayloadContext context) {
+        context.enqueueWork(() -> ClientRtsController.get().applyWorkflowProgressBatch(payload));
+    }
+
+    public static void handleResumePlacementScan(S2CRtsResumePlacementScanPayload payload, IPayloadContext context) {
+        context.enqueueWork(() -> {
+            ClientRtsController controller = ClientRtsController.get();
+            controller.applyResumePlacementScan(payload);
+            // 打开重启面板
+            if (Minecraft.getInstance().screen instanceof BuilderScreen bs) {
+                RtsResumePlacementPanel panel = bs.getResumePlacementPanel();
+                panel.openWithData(payload);
+            }
+        });
     }
 }

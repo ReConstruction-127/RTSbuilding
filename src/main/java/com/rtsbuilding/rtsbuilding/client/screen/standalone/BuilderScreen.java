@@ -8,6 +8,7 @@ import com.rtsbuilding.rtsbuilding.blueprint.client.BlueprintWindowPanel;
 import com.rtsbuilding.rtsbuilding.client.bootstrap.ClientKeyMappings;
 import com.rtsbuilding.rtsbuilding.client.controller.ClientRtsController;
 import com.rtsbuilding.rtsbuilding.client.network.RtsClientPacketGateway;
+import com.rtsbuilding.rtsbuilding.client.pathfinding.RtsClientPathfinding;
 import com.rtsbuilding.rtsbuilding.client.record.CraftableEntry;
 import com.rtsbuilding.rtsbuilding.client.rendering.util.RenderingUtil;
 import com.rtsbuilding.rtsbuilding.client.screen.blueprint.BlueprintGhostPreview;
@@ -36,6 +37,8 @@ import com.rtsbuilding.rtsbuilding.client.screen.shape.ShapeGeometryUtil;
 import com.rtsbuilding.rtsbuilding.client.screen.storage.LinkedStoragePanel;
 import com.rtsbuilding.rtsbuilding.client.screen.topbar.TopBarPanel;
 import com.rtsbuilding.rtsbuilding.client.screen.topbar.TopBarTypes;
+import com.rtsbuilding.rtsbuilding.client.screen.workflow.RtsResumePlacementPanel;
+import com.rtsbuilding.rtsbuilding.client.screen.workflow.RtsWorkflowPanel;
 import com.rtsbuilding.rtsbuilding.client.service.MiningOperationService;
 import com.rtsbuilding.rtsbuilding.client.state.RtsClientUiStateStore;
 import com.rtsbuilding.rtsbuilding.client.state.RtsScreenUiStateManager;
@@ -142,6 +145,10 @@ public final class BuilderScreen extends Screen {
     private final RtsFloatingWindowLayer floatingWindowLayer;
     /** Handler for storage link detail action rendering and clicks. */
     private final StorageLinkDetailHandler storageLinkDetailHandler;
+    /** Movable window panel for workflow progress and controls. */
+    private final RtsWorkflowPanel workflowPanel = new RtsWorkflowPanel();
+    /** Panel for reviewing and resuming suspended placement jobs. */
+    private final RtsResumePlacementPanel resumePlacementPanel = new RtsResumePlacementPanel();
     /** Whether the user is currently dragging the input sensitivity slider. */
     private boolean draggingInputSensitivity = false;
     /** Whether the funnel hotkey (quick-activate funnel mode) is currently held down. */
@@ -165,6 +172,18 @@ public final class BuilderScreen extends Screen {
      */
     private int pendingGuiBindSlot = -1;
     /**
+     * 上一次 Ctrl+右键的时刻（ms），用于双击检测以触发「飞到目标上方」。
+     */
+    private long lastCtrlRightClickTime = 0;
+    /**
+     * Ctrl+右键双击时间阈值（ms）。
+     */
+    private static final long CTRL_DOUBLE_CLICK_THRESHOLD_MS = 300;
+    /**
+     * 冷却计数器，防止 Alt+Space 按键重复事件导致飞行开关快速抖动。
+     */
+    private int rtsFlightToggleCooldownTicks = 0;
+    /**
      * Constructs the main RTS Builder screen.
      *
      * @param controller the central client-side RTS controller for bridging screen and game logic
@@ -185,7 +204,9 @@ public final class BuilderScreen extends Screen {
                 this.craftQuantityWindowPanel,
                 this.gearMenuPanel,
                 this.guidePanel,
-                this.quickBuildPanel);
+                this.quickBuildPanel,
+                this.workflowPanel,
+                this.resumePlacementPanel);
         this.uiStateManager.registerWindowPanel("settings", this.gearMenuPanel);
         this.uiStateManager.registerWindowPanel("blueprints", this.blueprintWindowPanel);
         this.uiStateManager.registerWindowPanel("guide", this.guidePanel);
@@ -202,6 +223,8 @@ public final class BuilderScreen extends Screen {
         this.craftQuantityWindowPanel.init(this, this.controller);
         this.funnelBufferPanel.init(this, this.controller);
         this.quickBuildPanel.init(this, this.controller);
+        this.workflowPanel.init(this, this.controller);
+        this.resumePlacementPanel.init(this, this.controller);
         this.linkedStoragePanel.init(this, this.controller);
         this.topBarPanel.init(this, this.controller);
         this.bottomPanel.init(this, this.controller);
@@ -276,6 +299,13 @@ public final class BuilderScreen extends Screen {
     /** Returns the Minecraft client instance for access by sub-panels and utilities. */
     public net.minecraft.client.Minecraft getMinecraft() {
         return this.minecraft;
+    }
+
+    /**
+     * Returns the resume placement panel, so external handlers can open it.
+     */
+    public RtsResumePlacementPanel getResumePlacementPanel() {
+        return this.resumePlacementPanel;
     }
     /** Returns the last recorded mouse X position (updated each render frame). */
     public double getCurrentMouseX() {
@@ -372,6 +402,9 @@ public final class BuilderScreen extends Screen {
     public void tick() {
         super.tick();
         enforceBlueprintPlacementModeLock();
+        if (this.rtsFlightToggleCooldownTicks > 0) {
+            this.rtsFlightToggleCooldownTicks--;
+        }
         if (this.controller.getMode() == BuilderMode.FUNNEL && this.controller.isFunnelEnabled()) {
             BlockHitResult hit = this.cursorPicker.pickBlockHit();
             if (hit != null) {
@@ -541,6 +574,13 @@ public final class BuilderScreen extends Screen {
         }
         boolean primaryMouse = CameraInputHandler.isPrimaryActionMouse(button);
         boolean rotateMouse = CameraInputHandler.isRotateDragActionMouse(button);
+        boolean panMouse = CameraInputHandler.isPanDragActionMouse(button);
+        boolean pickMouse = CameraInputHandler.isPickBlockActionMouse(button);
+        /*
+         * After key binding swap:
+         *   Right button → primary action + camera pan (movement)
+         *   Middle button → camera rotation + pick block
+         */
         if (primaryMouse || rotateMouse) {
             if (isSearchFocused()) {
                 blurSearchFocus();
@@ -548,17 +588,37 @@ public final class BuilderScreen extends Screen {
             if (primaryMouse && this.pendingGuiBindSlot >= 0 && isWorldArea(mouseX, mouseY)) {
                 return true;
             }
-            if (primaryMouse && !rotateMouse && isWorldArea(mouseX, mouseY) && this.controller.getMode() == BuilderMode.LINK_STORAGE) {
+            if (primaryMouse && !panMouse && isWorldArea(mouseX, mouseY) && this.controller.getMode() == BuilderMode.LINK_STORAGE) {
                 return true;
             }
             if (primaryMouse && isInsideBottomPanel(mouseX, mouseY)) {
                 return this.bottomPanel.handleRightClick(mouseX, mouseY);
             }
-            if (primaryMouse && isWorldArea(mouseX, mouseY) && this.controller.getMode() == BuilderMode.ROTATE && !rotateMouse) {
+            if (primaryMouse && isWorldArea(mouseX, mouseY) && this.controller.getMode() == BuilderMode.ROTATE && !panMouse) {
                 BlockHitResult hit = this.cursorPicker.pickBlockHit();
                 if (hit != null) {
                     clearShapeBuildSession();
                     this.controller.rotateBlock(hit.getBlockPos());
+                }
+                return true;
+            }
+            if (primaryMouse && isWorldArea(mouseX, mouseY) && Screen.hasControlDown()) {
+                // Ctrl + RightClick → 向目标点直线移动
+                // 双击（300ms 内连续两次）→ 飞到目标上方指定高度
+                long now = System.currentTimeMillis();
+                boolean isDoubleClick = (now - this.lastCtrlRightClickTime) < CTRL_DOUBLE_CLICK_THRESHOLD_MS;
+                this.lastCtrlRightClickTime = now;
+
+                BlockHitResult hit = this.cursorPicker.pickBlockHit();
+                if (hit != null) {
+                    if (isDoubleClick) {
+                        this.lastCtrlRightClickTime = 0;
+                        // Ctrl + 双击右键 → 强制降落到目标方块表面（3D到达判定）
+                        RtsClientPathfinding.goToAbove(hit.getBlockPos(), 1);
+                    } else {
+                        // Ctrl + 单次右键 → 普通直线移动（仅 XZ 到达判定）
+                        RtsClientPathfinding.goTo(hit.getBlockPos());
+                    }
                 }
                 return true;
             }
@@ -568,8 +628,6 @@ public final class BuilderScreen extends Screen {
             }
             return true;
         }
-        boolean panMouse = CameraInputHandler.isPanDragActionMouse(button);
-        boolean pickMouse = CameraInputHandler.isPickBlockActionMouse(button);
         if (panMouse || pickMouse) {
             this.cameraInput.beginMiddlePress(isWorldArea(mouseX, mouseY), button, panMouse, pickMouse);
             return true;
@@ -1018,6 +1076,14 @@ public final class BuilderScreen extends Screen {
         if (hasControlDown() && keyCode == GLFW.GLFW_KEY_Z) {
             return this.shapeController.undoLastPlacementBatch();
         }
+        // Alt+Space: toggle creative flight for the player entity in RTS mode
+        if (!isSearchFocused() && (modifiers & GLFW.GLFW_MOD_ALT) != 0 && keyCode == GLFW.GLFW_KEY_SPACE) {
+            if (this.rtsFlightToggleCooldownTicks <= 0) {
+                this.rtsFlightToggleCooldownTicks = 10;
+                handleRtsFlightToggle();
+            }
+            return true;
+        }
         if (!isSearchFocused() && this.cameraInput.updateCameraVerticalHeldState(keyCode, scanCode, true)) {
             return true;
         }
@@ -1155,6 +1221,30 @@ public final class BuilderScreen extends Screen {
         }
         return super.keyReleased(keyCode, scanCode, modifiers);
     }
+    /**
+     * Toggles the player's creative flight state while in RTS mode.
+     * Only works if the player has the {@code mayfly} ability (creative/spectator mode).
+     * When enabling flight while on ground, triggers a jump first to lift off,
+     * since vanilla Minecraft requires the player to be airborne to enter
+     * flying state even with {@code abilities.flying = true}.
+     * Called when Alt+Space is pressed in the RTS builder screen.
+     */
+    private void handleRtsFlightToggle() {
+        if (this.minecraft == null || this.minecraft.player == null) return;
+        if (!this.minecraft.player.getAbilities().mayfly) return;
+
+        boolean wasFlying = this.minecraft.player.getAbilities().flying;
+        this.minecraft.player.getAbilities().flying = !wasFlying;
+
+        // When enabling flight while on ground, apply a jump impulse to lift off.
+        // Vanilla MC won't actually start flying if the player stays on ground.
+        if (!wasFlying && this.minecraft.player.onGround()) {
+            this.minecraft.player.jumpFromGround();
+        }
+
+        this.minecraft.player.onUpdateAbilities();
+    }
+
     /**
      * Routes a key press to the appropriate builder mode switch based on keybind matching.
      *

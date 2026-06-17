@@ -5,10 +5,7 @@ import com.rtsbuilding.rtsbuilding.network.storage.S2CRtsStoragePagePayload;
 import com.rtsbuilding.rtsbuilding.progression.RtsFeature;
 import com.rtsbuilding.rtsbuilding.server.menu.RtsCraftTerminalMenu;
 import com.rtsbuilding.rtsbuilding.server.progression.RtsProgressionManager;
-import com.rtsbuilding.rtsbuilding.server.service.QuestService;
-import com.rtsbuilding.rtsbuilding.server.service.RtsPageService;
-import com.rtsbuilding.rtsbuilding.server.service.RtsRemoteMenuService;
-import com.rtsbuilding.rtsbuilding.server.service.RtsSessionService;
+import com.rtsbuilding.rtsbuilding.server.service.*;
 import com.rtsbuilding.rtsbuilding.server.service.transfer.RtsTransferExtractor;
 import com.rtsbuilding.rtsbuilding.server.service.transfer.RtsTransferInserter;
 import com.rtsbuilding.rtsbuilding.server.storage.LinkedHandler;
@@ -176,6 +173,8 @@ public final class RtsCraftingExecutor {
         }
         player.displayClientMessage(Component.literal(summary.toString()), true);
         QuestService.runQuestDetect(player, session, false);
+        // 合成完成后自动尝试恢复挂起放置作业
+        RtsPendingPlacementService.tryResumeAfterStorageChange(player);
     }
 
     // ---- single craft -----------------------------------------------------------
