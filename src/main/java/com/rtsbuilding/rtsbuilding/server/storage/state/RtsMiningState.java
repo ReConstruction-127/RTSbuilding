@@ -1,4 +1,4 @@
-package com.rtsbuilding.rtsbuilding.server.storage;
+package com.rtsbuilding.rtsbuilding.server.storage.state;
 
 import com.rtsbuilding.rtsbuilding.server.history.HistoryBlockRecord;
 import com.rtsbuilding.rtsbuilding.server.service.mining.RtsMiningStateMachine;
@@ -14,7 +14,7 @@ import java.util.List;
 /**
  * 远程挖掘与连锁挖掘（Ultimine）的可变状态容器。
  *
- * <p>从 {@link RtsStorageSession} 提取，按 "玩家如何执行远程挖掘操作"
+ * <p>从 RtsStorageSession 提取，按 "玩家如何执行远程挖掘操作"
  * 的职责聚合。包含单方块挖掘、连锁挖掘、工具借用/归还等运行时状态。
  *
  * <h3>设计约束</h3>
@@ -37,9 +37,9 @@ public class RtsMiningState {
     public int miningToolSlot;
     /** 当前借用的远程挖掘工具租约 */
     public RtsToolLease miningToolLease = RtsToolLease.empty();
-    /** True when a non-block RTS selected item must be used instead of silently falling back to the hotbar. */
+    /** 当需要使用 RTS 选中的非方块物品而不是静默回退到快捷栏时为 true。 */
     public boolean miningSelectedToolRequested;
-    /** True when active batch mining should stop before a damageable tool reaches its last 5% durability. */
+    /** 当活动的批量挖掘应在可损耗工具达到最后 5% 耐久前停止时为 true。 */
     public boolean miningToolProtectionEnabled = true;
     /** 当前挖掘进度[0.0, 1.0]，服务端按 tick 递增 */
     public float miningProgress;
@@ -62,11 +62,13 @@ public class RtsMiningState {
     public final List<HistoryBlockRecord> ultimineProcessedPositions = new ArrayList<>();
     /** 连锁挖掘已成功破坏的目标方块数（不含连带破坏），用于工作流进度统计 */
     public int ultimineBrokenTargets;
+    /** 累计未同步的破坏数（用于节流防闪，累计 ≥ 5 或挖掘结束时才触发 notifyPlayer） */
+    public int ultimineNotifyAccumulator;
     /** 连锁挖掘是否已吸收掉落物（防止重复收集，由管理器控制） */
     public boolean ultimineAbsorbedDrops;
 
     /**
-     * 排队等待执行的连锁挖掘作业队列（独立线程）。
+     * 排队等待执行的连锁挖掘作业队列。
      * 当前正在处理的作业的状态直接由本类的 ultimineTargets / ultimineTotalTargets 等字段持有；
      * 此队列中的作业将在当前作业完成后依次被激活。
      */

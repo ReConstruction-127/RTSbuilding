@@ -1,4 +1,4 @@
-package com.rtsbuilding.rtsbuilding.server.storage;
+package com.rtsbuilding.rtsbuilding.server.storage.state;
 
 import net.minecraft.core.BlockPos;
 
@@ -7,7 +7,7 @@ import java.util.concurrent.atomic.AtomicLong;
 /**
  * 远程 GUI 菜单状态与会话数据版本的可变状态容器。
  *
- * <p>从 {@link RtsStorageSession} 提取，按 "远程菜单交互和数据版本追踪"
+ * <p>从 RtsStorageSession 提取，按 "远程菜单交互和数据版本追踪"
  * 的职责聚合。包含远程 GUI 菜单的容器 ID 和方块坐标、任务检测时间、
  * 存储视图过期标志以及页面缓存数据版本号。
  *
@@ -32,7 +32,7 @@ public class RtsTransferState {
     /** 下次检测 RTS 任务或进度的 tick 时间 */
     public long nextQuestDetectTick;
 
-    /** True when the client's storage browser page no longer matches storage contents. */
+    /** 当客户端的存储浏览器页面不再匹配存储内容时为 true。 */
     public boolean storageViewDirty;
 
     /**

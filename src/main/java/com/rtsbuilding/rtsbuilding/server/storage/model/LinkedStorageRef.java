@@ -1,4 +1,4 @@
-package com.rtsbuilding.rtsbuilding.server.storage;
+package com.rtsbuilding.rtsbuilding.server.storage.model;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceKey;

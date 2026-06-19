@@ -1,4 +1,4 @@
-package com.rtsbuilding.rtsbuilding.server.storage;
+package com.rtsbuilding.rtsbuilding.server.storage.state;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.item.ItemStack;
@@ -9,7 +9,7 @@ import java.util.List;
 /**
  * 掉落物漏斗运行时状态的可变状态容器。
  *
- * <p>从 {@link RtsStorageSession} 提取，按 "掉落物漏斗的自动收集和缓冲"
+ * <p>从 RtsStorageSession 提取，按 "掉落物漏斗的自动收集和缓冲"
  * 的职责聚合。包含漏斗开关、目标坐标、冷却刻数和临时缓冲区。
  *
  * <h3>设计约束</h3>

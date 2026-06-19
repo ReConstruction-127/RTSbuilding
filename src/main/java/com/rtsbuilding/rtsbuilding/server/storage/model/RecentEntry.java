@@ -1,4 +1,4 @@
-package com.rtsbuilding.rtsbuilding.server.storage;
+package com.rtsbuilding.rtsbuilding.server.storage.model;
 
 /**
  * UI 最近条目快照。

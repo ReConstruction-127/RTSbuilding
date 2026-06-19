@@ -1,4 +1,4 @@
-package com.rtsbuilding.rtsbuilding.server.storage;
+package com.rtsbuilding.rtsbuilding.server.storage.state;
 
 import com.rtsbuilding.rtsbuilding.server.service.placement.RtsPlacementBatch;
 import net.minecraft.core.BlockPos;
@@ -10,7 +10,7 @@ import java.util.Deque;
 /**
  * 远程放置与已放置方块回收的可变状态容器。
  *
- * <p>从 {@link RtsStorageSession} 提取，按 "玩家如何执行远程放置和回收"
+ * <p>从 RtsStorageSession 提取，按 "玩家如何执行远程放置和回收"
  * 的职责聚合。包含放置批次作业队列和已放置方块被破坏后的掉落物回收队列。
  *
  * <h3>设计约束</h3>
