@@ -10,8 +10,6 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.level.block.state.BlockState;
 
-import javax.annotation.Nullable;
-
 /**
  * 挖掘速度计算工具集——纯函数式计算，无状态。
  *

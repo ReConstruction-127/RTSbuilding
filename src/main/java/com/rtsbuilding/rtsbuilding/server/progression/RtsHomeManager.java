@@ -150,7 +150,7 @@ final class RtsHomeManager {
             root.putString(RtsProgressionPersistence.NBT_HOME_DIMENSION,
                     player.serverLevel().dimension().location().toString());
             root.putLong(RtsProgressionPersistence.NBT_HOME_SET_GAME_TIME, player.serverLevel().getGameTime());
-            player.getPersistentData().put(RtsProgressionPersistence.NBT_ROOT, root);
+            RtsProgressionPersistence.save(player, root);
         } else {
             RtsProgressionPersistence.sharedProgressionData(player).setHome(
                     sharedKey, pos, player.serverLevel().dimension(), player.serverLevel().getGameTime());

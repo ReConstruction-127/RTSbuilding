@@ -6,11 +6,12 @@ import com.rtsbuilding.rtsbuilding.client.screen.panel.RtsWindowPanel;
 import com.rtsbuilding.rtsbuilding.client.screen.shape.ShapeGeometryUtil;
 import com.rtsbuilding.rtsbuilding.client.screen.standalone.BuilderScreen;
 import com.rtsbuilding.rtsbuilding.client.screen.ultimine.AreaMineShape;
-import com.rtsbuilding.rtsbuilding.common.persist.PersistableProperty;
 import com.rtsbuilding.rtsbuilding.client.util.RtsTextureRenderer;
 import com.rtsbuilding.rtsbuilding.client.widget.WindowButton;
 import com.rtsbuilding.rtsbuilding.client.widget.WindowSlider;
+import com.rtsbuilding.rtsbuilding.common.persist.PersistableProperty;
 import com.rtsbuilding.rtsbuilding.common.shape.model.ShapeFillMode;
+import com.rtsbuilding.rtsbuilding.server.workflow.model.RtsWorkflowStatus;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -20,8 +21,6 @@ import net.minecraft.world.item.ItemStack;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.List;
-
-import com.rtsbuilding.rtsbuilding.server.workflow.model.RtsWorkflowStatus;
 
 import static com.rtsbuilding.rtsbuilding.client.screen.standalone.BuilderScreenConstants.*;
 

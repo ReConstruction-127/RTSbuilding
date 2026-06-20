@@ -1,6 +1,5 @@
 package com.rtsbuilding.rtsbuilding.server;
 
-import com.rtsbuilding.rtsbuilding.server.data.RtsStorageSessionCodec;
 import com.rtsbuilding.rtsbuilding.server.storage.model.GuiBinding;
 import com.rtsbuilding.rtsbuilding.server.storage.session.RtsStorageSession;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -14,8 +13,7 @@ import java.util.List;
  * 从 RTS 存储会话构建只读的客户端数据包/UI 快照。
  *
  * <p>该辅助类仅将已拥有的 {@link RtsStorageSession} 状态转换为客户端存储数据包和 UI 组件
- * 所需的有序列表。它不负责 NBT 的序列化或反序列化——持久化会话格式属于
- * {@link RtsStorageSessionCodec}。它不执行能力查找——关联存储的解析属于关联的解析器/管理器路径。
+ * 所需的有序列表。它不负责 NBT 的序列化或反序列化——持久化会话格式在
  * 它也不打开外部 GUI、验证 GUI 绑定是否仍可用、或修改快捷栏。
  *
  * <p>数据包的约定是故意严格的：快捷栏和 GUI 绑定必须保持服务端的顺序，缺失/空值必须用空字符串

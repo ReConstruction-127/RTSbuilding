@@ -1,8 +1,8 @@
 package com.rtsbuilding.rtsbuilding.server.service;
 
 import com.rtsbuilding.rtsbuilding.compat.remote.RtsRemoteMenuCompat;
-import com.rtsbuilding.rtsbuilding.server.progression.RtsFeature;
 import com.rtsbuilding.rtsbuilding.server.pipeline.core.TickablePipelineRegistry;
+import com.rtsbuilding.rtsbuilding.server.progression.RtsFeature;
 import com.rtsbuilding.rtsbuilding.server.progression.RtsProgressionManager;
 import com.rtsbuilding.rtsbuilding.server.service.destruction.RtsDestructionBatch;
 import com.rtsbuilding.rtsbuilding.server.service.mining.RtsMiningStateMachine;

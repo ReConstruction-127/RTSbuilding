@@ -6,12 +6,11 @@ import com.rtsbuilding.rtsbuilding.client.controller.ClientRtsController;
 import com.rtsbuilding.rtsbuilding.client.rendering.util.RenderingUtil;
 import com.rtsbuilding.rtsbuilding.client.screen.shape.ShapeDataRecords;
 import com.rtsbuilding.rtsbuilding.client.screen.standalone.BuilderScreen;
+import com.rtsbuilding.rtsbuilding.server.workflow.model.RtsWorkflowStatus;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 
 import java.util.List;
-
-import com.rtsbuilding.rtsbuilding.server.workflow.model.RtsWorkflowStatus;
 
 /**
  * Entry-point facade that coordinates all in-world ghost preview rendering

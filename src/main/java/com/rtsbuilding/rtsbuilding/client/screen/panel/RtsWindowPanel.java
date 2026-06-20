@@ -2,10 +2,10 @@ package com.rtsbuilding.rtsbuilding.client.screen.panel;
 
 import com.rtsbuilding.rtsbuilding.client.controller.ClientRtsController;
 import com.rtsbuilding.rtsbuilding.client.screen.standalone.BuilderScreen;
-import com.rtsbuilding.rtsbuilding.common.persist.BoundsProvider;
-import com.rtsbuilding.rtsbuilding.common.persist.PersistableProperty;
 import com.rtsbuilding.rtsbuilding.client.util.RtsClientUiUtil;
 import com.rtsbuilding.rtsbuilding.client.widget.WindowButton;
+import com.rtsbuilding.rtsbuilding.common.persist.BoundsProvider;
+import com.rtsbuilding.rtsbuilding.common.persist.PersistableProperty;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;

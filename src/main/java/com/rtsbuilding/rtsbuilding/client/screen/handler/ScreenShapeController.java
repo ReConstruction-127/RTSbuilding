@@ -1,7 +1,6 @@
 package com.rtsbuilding.rtsbuilding.client.screen.handler;
 
 import com.rtsbuilding.rtsbuilding.client.controller.ClientRtsController;
-import com.rtsbuilding.rtsbuilding.server.workflow.model.RtsWorkflowStatus;
 import com.rtsbuilding.rtsbuilding.client.rendering.animation.PlacementAnimationRenderer;
 import com.rtsbuilding.rtsbuilding.client.rendering.builder.BuildGhostBlockStateResolver;
 import com.rtsbuilding.rtsbuilding.client.rendering.util.RenderingUtil;
@@ -12,6 +11,7 @@ import com.rtsbuilding.rtsbuilding.client.screen.shape.ShapeDataRecords;
 import com.rtsbuilding.rtsbuilding.client.screen.shape.ShapeGeometryUtil;
 import com.rtsbuilding.rtsbuilding.client.screen.standalone.BuilderScreen;
 import com.rtsbuilding.rtsbuilding.common.shape.model.ShapeFillMode;
+import com.rtsbuilding.rtsbuilding.server.workflow.model.RtsWorkflowStatus;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -47,6 +47,16 @@ public final class ScreenShapeController {
     private ShapeFillMode shapeFillMode = ShapeFillMode.FILL;
     private boolean lineConnected = false;
     private int shapeRotateDegrees = 0;
+
+    // ===== BUILD 模式独立按钮状态 =====
+    private ShapeFillMode buildShapeFillMode = ShapeFillMode.FILL;
+    private boolean buildLineConnected = false;
+    private int buildRotateDegrees = 0;
+
+    // ===== 范围破坏模式独立按钮状态 =====
+    private ShapeFillMode destroyShapeFillMode = ShapeFillMode.FILL;
+    private boolean destroyLineConnected = false;
+    private int destroyRotateDegrees = 0;
     private ShapeDataRecords.GhostPreview confirmedRangeDestroyPreview = ShapeDataRecords.GhostPreview.EMPTY;
     private long confirmedRangeDestroyPreviewUntilMs;
     private ShapeDataRecords.GhostPreview confirmedChainDestroyPreview = ShapeDataRecords.GhostPreview.EMPTY;
@@ -69,6 +79,24 @@ public final class ScreenShapeController {
         this.shapeFillMode = mode;
     }
 
+    /** 返回 BUILD 模式的独立填充模式 */
+    public ShapeFillMode getBuildShapeFillMode() {
+        return this.buildShapeFillMode;
+    }
+
+    public void setBuildShapeFillMode(ShapeFillMode mode) {
+        this.buildShapeFillMode = mode;
+    }
+
+    /** 返回范围破坏模式的独立填充模式 */
+    public ShapeFillMode getDestroyShapeFillMode() {
+        return this.destroyShapeFillMode;
+    }
+
+    public void setDestroyShapeFillMode(ShapeFillMode mode) {
+        this.destroyShapeFillMode = mode;
+    }
+
     public boolean isLineConnected() {
         return this.lineConnected;
     }
@@ -77,8 +105,36 @@ public final class ScreenShapeController {
         this.lineConnected = connected;
     }
 
+    /** 返回 BUILD 模式的独立直线连接状态 */
+    public boolean isBuildLineConnected() {
+        return this.buildLineConnected;
+    }
+
+    public void setBuildLineConnected(boolean connected) {
+        this.buildLineConnected = connected;
+    }
+
+    /** 返回范围破坏模式的独立直线连接状态 */
+    public boolean isDestroyLineConnected() {
+        return this.destroyLineConnected;
+    }
+
+    public void setDestroyLineConnected(boolean connected) {
+        this.destroyLineConnected = connected;
+    }
+
     public int getShapeRotateDegrees() {
         return this.shapeRotateDegrees;
+    }
+
+    /** 返回 BUILD 模式的独立旋转角度 */
+    public int getBuildRotateDegrees() {
+        return this.buildRotateDegrees;
+    }
+
+    /** 返回范围破坏模式的独立旋转角度 */
+    public int getDestroyRotateDegrees() {
+        return this.destroyRotateDegrees;
     }
 
     public int getShapeUndoSize() {
@@ -103,6 +159,10 @@ public final class ScreenShapeController {
         this.shapeRotateDegrees = Math.floorMod(degrees, 360);
     }
 
+    public void rotateDestroyToDegrees(int degrees) {
+        this.destroyRotateDegrees = Math.floorMod(degrees, 360);
+    }
+
     public void setShapeCursorY(double cursorY) {
         this.shapeCursorY = cursorY;
     }
@@ -124,6 +184,20 @@ public final class ScreenShapeController {
         }
     }
 
+    /** 校验范围破坏模式的填充模式是否对指定形状合法 */
+    public void ensureDestroyFillModeForShape(BuildShape shape) {
+        List<ShapeFillMode> modes = ShapeGeometryUtil.availableFillModes(shape);
+        if (modes.isEmpty()) {
+            this.destroyShapeFillMode = ShapeFillMode.FILL;
+            this.screen.persistUiState();
+            return;
+        }
+        if (!modes.contains(this.destroyShapeFillMode)) {
+            this.destroyShapeFillMode = modes.get(0);
+            this.screen.persistUiState();
+        }
+    }
+
     public boolean cycleShapeFillModeForCurrentShape(int step) {
         BuildShape shape = this.controller.getBuildShape();
         List<ShapeFillMode> modes = ShapeGeometryUtil.availableFillModes(shape);
@@ -140,6 +214,57 @@ public final class ScreenShapeController {
         this.shapeFillMode = modes.get(next);
         this.screen.persistUiState();
         return true;
+    }
+
+    /** 范围破坏模式下的填充模式循环切换 */
+    public boolean cycleDestroyShapeFillModeForCurrentShape(int step) {
+        BuildShape shape = this.controller.getBuildShape();
+        List<ShapeFillMode> modes = ShapeGeometryUtil.availableFillModes(shape);
+        if (modes.isEmpty()) {
+            return false;
+        }
+        int currentIndex = modes.indexOf(this.destroyShapeFillMode);
+        if (currentIndex < 0) {
+            this.destroyShapeFillMode = modes.get(0);
+            this.screen.persistUiState();
+            return true;
+        }
+        int next = Math.floorMod(currentIndex + step, modes.size());
+        this.destroyShapeFillMode = modes.get(next);
+        this.screen.persistUiState();
+        return true;
+    }
+
+    // ===== 模式切换：在 BUILD 与 DESTROY 之间搬运状态 =====
+
+    /**
+     * 从 BUILD 切换到 DESTROY：保存当前活跃状态到 BUILD 独立字段，
+     * 然后将之前保存的 DESTROY 独立状态恢复到活跃字段。
+     */
+    public void switchToDestroy() {
+        // 保存当前活跃的 BUILD 状态
+        this.buildShapeFillMode = this.shapeFillMode;
+        this.buildLineConnected = this.lineConnected;
+        this.buildRotateDegrees = this.shapeRotateDegrees;
+        // 恢复 DESTROY 状态到活跃字段
+        this.shapeFillMode = this.destroyShapeFillMode;
+        this.lineConnected = this.destroyLineConnected;
+        this.shapeRotateDegrees = this.destroyRotateDegrees;
+    }
+
+    /**
+     * 从 DESTROY 切换到 BUILD：保存当前活跃状态到 DESTROY 独立字段，
+     * 然后将之前保存的 BUILD 独立状态恢复到活跃字段。
+     */
+    public void switchToBuild() {
+        // 保存当前活跃的 DESTROY 状态
+        this.destroyShapeFillMode = this.shapeFillMode;
+        this.destroyLineConnected = this.lineConnected;
+        this.destroyRotateDegrees = this.shapeRotateDegrees;
+        // 恢复 BUILD 状态到活跃字段
+        this.shapeFillMode = this.buildShapeFillMode;
+        this.lineConnected = this.buildLineConnected;
+        this.shapeRotateDegrees = this.buildRotateDegrees;
     }
 
     // ===== Shape building flow =====

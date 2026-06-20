@@ -3,8 +3,8 @@ package com.rtsbuilding.rtsbuilding.client.bootstrap;
 
 import com.rtsbuilding.rtsbuilding.RtsbuildingMod;
 import com.rtsbuilding.rtsbuilding.client.camera.RtsCameraEntityRenderer;
-import com.rtsbuilding.rtsbuilding.common.RtsEntities;
 import com.rtsbuilding.rtsbuilding.client.pathfinding.RtsMovementModeRegistry;
+import com.rtsbuilding.rtsbuilding.common.RtsEntities;
 import net.minecraft.client.Minecraft;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;

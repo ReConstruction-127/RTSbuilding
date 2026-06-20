@@ -1,7 +1,5 @@
 package com.rtsbuilding.rtsbuilding.client.screen.blueprint;
 
-import com.rtsbuilding.rtsbuilding.client.screen.blueprint.BlueprintPanel;
-
 import java.util.List;
 
 /**

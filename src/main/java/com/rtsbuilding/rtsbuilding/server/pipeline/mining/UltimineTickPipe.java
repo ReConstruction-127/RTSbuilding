@@ -5,7 +5,6 @@ import com.rtsbuilding.rtsbuilding.server.pipeline.core.PipelineContext;
 import com.rtsbuilding.rtsbuilding.server.pipeline.core.TickResult;
 import com.rtsbuilding.rtsbuilding.server.pipeline.core.TickablePipe;
 import com.rtsbuilding.rtsbuilding.server.pipeline.validation.SessionValidatePipe;
-import com.rtsbuilding.rtsbuilding.server.service.mining.RtsMiningStateMachine;
 import com.rtsbuilding.rtsbuilding.server.storage.session.RtsStorageSession;
 
 /**

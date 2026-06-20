@@ -3,10 +3,8 @@ package com.rtsbuilding.rtsbuilding.client.screen.workflow;
 import com.rtsbuilding.rtsbuilding.client.controller.ClientRtsController;
 import com.rtsbuilding.rtsbuilding.client.screen.panel.RtsWindowPanel;
 import com.rtsbuilding.rtsbuilding.client.screen.standalone.BuilderScreen;
-import com.rtsbuilding.rtsbuilding.common.persist.PersistableProperty;
 import com.rtsbuilding.rtsbuilding.client.util.RtsClientUiUtil;
-
-import java.util.List;
+import com.rtsbuilding.rtsbuilding.common.persist.PersistableProperty;
 import com.rtsbuilding.rtsbuilding.network.builder.C2SRtsResumePlacementActionPayload;
 import com.rtsbuilding.rtsbuilding.network.builder.S2CRtsResumePlacementScanPayload;
 import net.minecraft.client.gui.Font;
@@ -16,6 +14,8 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.network.PacketDistributor;
+
+import java.util.List;
 
 /**
  * 搁置放置作业重启面板。

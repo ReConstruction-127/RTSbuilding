@@ -1,10 +1,10 @@
 package com.rtsbuilding.rtsbuilding.server.pipeline.validation;
 
-import com.rtsbuilding.rtsbuilding.server.progression.RtsFeature;
 import com.rtsbuilding.rtsbuilding.server.pipeline.core.PipelineContext;
 import com.rtsbuilding.rtsbuilding.server.pipeline.core.PipelinePipe;
 import com.rtsbuilding.rtsbuilding.server.pipeline.core.PipelineResult;
 import com.rtsbuilding.rtsbuilding.server.pipeline.core.TypedKey;
+import com.rtsbuilding.rtsbuilding.server.progression.RtsFeature;
 import com.rtsbuilding.rtsbuilding.server.progression.RtsProgressionManager;
 
 /**

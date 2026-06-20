@@ -1,9 +1,9 @@
 package com.rtsbuilding.rtsbuilding.client.screen.input;
 
 import com.mojang.blaze3d.platform.InputConstants;
-import com.rtsbuilding.rtsbuilding.client.screen.blueprint.BlueprintPanel;
 import com.rtsbuilding.rtsbuilding.client.bootstrap.ClientKeyMappings;
 import com.rtsbuilding.rtsbuilding.client.controller.ClientRtsController;
+import com.rtsbuilding.rtsbuilding.client.screen.blueprint.BlueprintPanel;
 import com.rtsbuilding.rtsbuilding.client.screen.interaction.InteractionTypes;
 import com.rtsbuilding.rtsbuilding.client.screen.standalone.BuilderScreen;
 import com.rtsbuilding.rtsbuilding.client.service.MiningOperationService;

@@ -1,7 +1,7 @@
 package com.rtsbuilding.rtsbuilding.server.api.impl;
 
-import com.rtsbuilding.rtsbuilding.common.build.BuilderMode;
 import com.rtsbuilding.rtsbuilding.api.RtsBindingsAPI;
+import com.rtsbuilding.rtsbuilding.common.build.BuilderMode;
 import com.rtsbuilding.rtsbuilding.server.service.ServiceRegistry;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;

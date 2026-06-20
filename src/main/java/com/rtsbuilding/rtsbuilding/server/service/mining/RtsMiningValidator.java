@@ -1,8 +1,8 @@
 package com.rtsbuilding.rtsbuilding.server.service.mining;
 
 import com.rtsbuilding.rtsbuilding.common.RtsUltimineCollector;
-import com.rtsbuilding.rtsbuilding.server.progression.RtsFeature;
 import com.rtsbuilding.rtsbuilding.server.data.PlacedBlockTrackerData;
+import com.rtsbuilding.rtsbuilding.server.progression.RtsFeature;
 import com.rtsbuilding.rtsbuilding.server.progression.RtsProgressionManager;
 import com.rtsbuilding.rtsbuilding.server.service.RtsPlacedRecoveryService;
 import com.rtsbuilding.rtsbuilding.server.storage.resolver.RtsLinkedStorageResolver;

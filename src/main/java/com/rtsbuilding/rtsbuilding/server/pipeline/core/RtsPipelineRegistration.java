@@ -1,6 +1,5 @@
 package com.rtsbuilding.rtsbuilding.server.pipeline.core;
 
-import com.rtsbuilding.rtsbuilding.server.progression.RtsFeature;
 import com.rtsbuilding.rtsbuilding.server.pipeline.blueprint.BlueprintExecutePipe;
 import com.rtsbuilding.rtsbuilding.server.pipeline.blueprint.BlueprintPersistence;
 import com.rtsbuilding.rtsbuilding.server.pipeline.blueprint.BlueprintTickPipe;
@@ -15,6 +14,7 @@ import com.rtsbuilding.rtsbuilding.server.pipeline.validation.SessionDimensionPi
 import com.rtsbuilding.rtsbuilding.server.pipeline.validation.SessionValidatePipe;
 import com.rtsbuilding.rtsbuilding.server.pipeline.workflow.WorkflowProgressPipe;
 import com.rtsbuilding.rtsbuilding.server.pipeline.workflow.WorkflowStartPipe;
+import com.rtsbuilding.rtsbuilding.server.progression.RtsFeature;
 import com.rtsbuilding.rtsbuilding.server.service.mining.RtsMiningStateMachine;
 import com.rtsbuilding.rtsbuilding.server.service.mining.RtsUltimineProcessor;
 import com.rtsbuilding.rtsbuilding.server.service.placement.RtsPlacementBatch;

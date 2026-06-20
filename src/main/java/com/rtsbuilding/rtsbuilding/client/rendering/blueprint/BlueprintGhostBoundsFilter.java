@@ -1,7 +1,7 @@
 package com.rtsbuilding.rtsbuilding.client.rendering.blueprint;
 
-import com.rtsbuilding.rtsbuilding.client.screen.blueprint.BlueprintPanel;
 import com.rtsbuilding.rtsbuilding.client.controller.ClientRtsController;
+import com.rtsbuilding.rtsbuilding.client.screen.blueprint.BlueprintPanel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.util.Mth;
 

@@ -1,8 +1,6 @@
 package com.rtsbuilding.rtsbuilding.server.storage.state;
 
 import com.rtsbuilding.rtsbuilding.server.service.destruction.RtsDestructionBatch;
-import net.minecraft.core.BlockPos;
-import net.minecraft.world.item.ItemStack;
 
 import java.util.ArrayDeque;
 import java.util.Deque;

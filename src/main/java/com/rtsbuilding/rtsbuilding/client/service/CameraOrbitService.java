@@ -1,10 +1,10 @@
 package com.rtsbuilding.rtsbuilding.client.service;
 
 import com.mojang.blaze3d.platform.InputConstants;
-import com.rtsbuilding.rtsbuilding.common.RtsEntities;
 import com.rtsbuilding.rtsbuilding.client.bootstrap.ClientKeyMappings;
 import com.rtsbuilding.rtsbuilding.client.network.RtsClientPacketGateway;
 import com.rtsbuilding.rtsbuilding.client.screen.standalone.BuilderScreen;
+import com.rtsbuilding.rtsbuilding.common.RtsEntities;
 import com.rtsbuilding.rtsbuilding.common.entity.RtsCameraEntity;
 import net.minecraft.client.CameraType;
 import net.minecraft.client.Minecraft;

@@ -1,8 +1,9 @@
 package com.rtsbuilding.rtsbuilding.server.service.impl;
 
 import com.rtsbuilding.rtsbuilding.common.build.BuilderMode;
-import com.rtsbuilding.rtsbuilding.server.data.RtsStorageSessionCodec;
-import com.rtsbuilding.rtsbuilding.server.data.RtsStorageSessionStore;
+import com.rtsbuilding.rtsbuilding.server.data.SaveScheduler;
+import com.rtsbuilding.rtsbuilding.server.data.SessionSerializer;
+import com.rtsbuilding.rtsbuilding.server.data.SessionComponents;
 import com.rtsbuilding.rtsbuilding.server.history.ServerHistoryManager;
 import com.rtsbuilding.rtsbuilding.server.pipeline.core.TickablePipelineRegistry;
 import com.rtsbuilding.rtsbuilding.server.service.RtsRemoteMenuService;
@@ -15,6 +16,7 @@ import com.rtsbuilding.rtsbuilding.server.service.page.RtsPageCore;
 import com.rtsbuilding.rtsbuilding.server.storage.resolver.RtsLinkedStorageResolver;
 import com.rtsbuilding.rtsbuilding.server.storage.session.RtsStorageSession;
 import com.rtsbuilding.rtsbuilding.server.workflow.core.RtsWorkflowEngine;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerPlayer;
 
 import java.util.Collections;
@@ -29,7 +31,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * 负责：
  * <ul>
  *   <li>会话的懒加载创建（{@link #getOrCreate}）</li>
- *   <li>会话持久化（通过 {@link com.rtsbuilding.rtsbuilding.server.data.RtsStorageSessionCodec} 序列化到 NBT）</li>
+ *   <li>会话持久化（通过 {@link SessionComponents} 细粒度组件 + {@link SaveScheduler} 管理）</li>
  *   <li>玩家启用/禁用 RTS 模式时的资源初始化/清理</li>
  *   <li>玩家登出时的完整清理（释放挖掘、漏斗、远程菜单、BD 缓存等资源）</li>
  * </ul>
@@ -61,14 +63,23 @@ public final class RtsSessionServiceImpl implements SessionService {
 
     @Override
     public void saveToPlayerNbt(ServerPlayer player, RtsStorageSession session) {
-        var root = RtsStorageSessionCodec.serialize(player, session);
-        player.getPersistentData().put(RtsStorageSessionCodec.ROOT_KEY, root.copy());
-        RtsStorageSessionStore.saveSession(player, root);
+        var cluster = SaveScheduler.INSTANCE.player(player);
+
+        // 纯细粒度组件写入——每个组件独立编码、独立脏标记
+        cluster.set(SessionComponents.BROWSER, SessionSerializer.serializeBrowser(session.browser));
+        cluster.set(SessionComponents.FLAGS, SessionSerializer.serializeFlags(session.sessionFlags));
+        cluster.set(SessionComponents.MODE, session.mode);
+        cluster.set(SessionComponents.LINKED_STORAGE, SessionSerializer.serializeLinkedStorage(session));
+        cluster.set(SessionComponents.UI_MEMORY, SessionSerializer.serializeUiMemory(player, session));
+        cluster.set(SessionComponents.PLACEMENT, SessionSerializer.serializePlacement(player, session));
+        cluster.set(SessionComponents.DESTROY, SessionSerializer.serializeDestroy(player, session));
     }
 
     @Override
     public void onRtsEnabled(ServerPlayer player) {
         RtsStorageSession session = getOrCreate(player);
+        // 从 DataCluster 加载最新 mode（确保跨模式切换后状态一致）
+        session.mode = SaveScheduler.INSTANCE.player(player).get(SessionComponents.MODE);
         RtsLinkedStorageResolver.sanitizeSessionDimension(player, session);
         pageService.requestPage(player, session.browser.page, session.browser.search,
                 session.browser.category, session.browser.sort, session.browser.ascending, false);
@@ -133,17 +144,22 @@ public final class RtsSessionServiceImpl implements SessionService {
     }
 
     private void loadFromPersistentStorage(ServerPlayer player, RtsStorageSession session) {
-        var root = RtsStorageSessionStore.loadSession(player);
-        boolean loadedFromWorldStore = !root.isEmpty();
-        if (!loadedFromWorldStore) {
-            root = player.getPersistentData().getCompound(RtsStorageSessionCodec.ROOT_KEY);
+        var cluster = SaveScheduler.INSTANCE.player(player);
+
+        // 合并所有桥接组件的 NBT，统一反序列化
+        CompoundTag root = new CompoundTag();
+        root.merge(cluster.get(SessionComponents.BROWSER));
+        root.merge(cluster.get(SessionComponents.FLAGS));
+        root.merge(cluster.get(SessionComponents.LINKED_STORAGE));
+        root.merge(cluster.get(SessionComponents.UI_MEMORY));
+        root.merge(cluster.get(SessionComponents.PLACEMENT));
+        root.merge(cluster.get(SessionComponents.DESTROY));
+
+        if (!root.isEmpty()) {
+            SessionSerializer.loadAll(player, session, root);
         }
-        if (root.isEmpty()) {
-            return;
-        }
-        RtsStorageSessionCodec.load(player, session, root);
-        if (!loadedFromWorldStore) {
-            saveToPlayerNbt(player, session);
-        }
+
+        // MODE 有独立编解码且字段非 final，可直接赋值
+        session.mode = cluster.get(SessionComponents.MODE);
     }
 }

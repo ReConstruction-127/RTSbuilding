@@ -1,15 +1,15 @@
 package com.rtsbuilding.rtsbuilding.client.screen.blueprint;
 
 import com.rtsbuilding.rtsbuilding.Config;
-import com.rtsbuilding.rtsbuilding.common.blueprint.transform.BlueprintTransform;
-import com.rtsbuilding.rtsbuilding.common.blueprint.model.RtsBlueprint;
-import com.rtsbuilding.rtsbuilding.common.blueprint.model.RtsBlueprintBlock;
-import com.rtsbuilding.rtsbuilding.common.blueprint.io.BlueprintReaders;
-import com.rtsbuilding.rtsbuilding.common.blueprint.io.BlueprintWriters;
-import com.rtsbuilding.rtsbuilding.network.blueprint.C2SBlueprintPlacePayload;
-import com.rtsbuilding.rtsbuilding.network.blueprint.S2CBlueprintStatusPayload;
 import com.rtsbuilding.rtsbuilding.client.bootstrap.ClientKeyMappings;
 import com.rtsbuilding.rtsbuilding.client.controller.ClientRtsController;
+import com.rtsbuilding.rtsbuilding.common.blueprint.io.BlueprintReaders;
+import com.rtsbuilding.rtsbuilding.common.blueprint.io.BlueprintWriters;
+import com.rtsbuilding.rtsbuilding.common.blueprint.model.RtsBlueprint;
+import com.rtsbuilding.rtsbuilding.common.blueprint.model.RtsBlueprintBlock;
+import com.rtsbuilding.rtsbuilding.common.blueprint.transform.BlueprintTransform;
+import com.rtsbuilding.rtsbuilding.network.blueprint.C2SBlueprintPlacePayload;
+import com.rtsbuilding.rtsbuilding.network.blueprint.S2CBlueprintStatusPayload;
 import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;

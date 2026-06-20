@@ -1,147 +1,177 @@
 package com.rtsbuilding.rtsbuilding.server.data;
 
+import com.rtsbuilding.rtsbuilding.RtsbuildingMod;
 import com.rtsbuilding.rtsbuilding.server.workflow.service.RtsWorkflowSlotManager;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.NbtAccounter;
-import net.minecraft.nbt.NbtIo;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.storage.LevelResource;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 工作流条目在世界存档级别的持久化存储。
+ * 工作流条目的持久化存储。
  *
- * <p>将所有玩家的工作流槽位管理器以单个压缩 NBT 文件的形式
- * 存储在存档目录（{@code rtsbuilding/workflow_data.dat}）中。
- * 遵循与 {@link RtsStorageSessionStore} 相同的文件 I/O 模式。
+ * <p><b>新版</b>：通过 {@link DataCluster} + {@link WorkflowComponents#FULL_WORKFLOW}
+ * 按玩家拆分文件存储（{@code rtsbuilding/players/{uuid}/workflow.dat}）。
+ * 使用脏标记延迟刷盘，仅在玩家有活跃工作流时才写对应文件。
  *
- * <p>这是一个独立的存储层——调用方（通常是 {@code RtsWorkflowEngine}）
- * 在内存中管理槽位，并在生命周期边界调用
- * {@link #saveAll(MinecraftServer, Map)} / {@link #loadPlayer(MinecraftServer, UUID)}。
+ * <p><b>旧版</b>：将所有玩家数据写入单个 {@code rtsbuilding/workflow_data.dat}。
+ * 旧版 API 保留用于加载遗留存档数据时的回退。
+ *
+ * @deprecated 新版 API 已就绪——请通过 {@link #saveAll(MinecraftServer, Map)} 和
+ *             {@link #loadPlayer(MinecraftServer, UUID)} 直接使用，内部已切换到 DataCluster。
  */
 public final class RtsWorkflowStore {
+
+    // ──────────────────────────────────────────────────────────────────
+    //  旧版常量（保留用于遗留数据回退）
+    // ──────────────────────────────────────────────────────────────────
+
     private static final String DIRECTORY = "rtsbuilding";
     private static final String FILE_NAME = "workflow_data.dat";
-    private static final String TEMP_FILE_NAME = "workflow_data.dat.tmp";
     private static final String KEY_DATA_VERSION = "data_version";
     private static final String KEY_PLAYERS = "players";
     private static final int DATA_VERSION = 1;
 
-    // 每个玩家数据的内部键名
-    private static final String KEY_NEXT_ID = "next_id";
-    /** NBT 键名：维度数据映射 */
     private static final String KEY_DIMENSIONS = "dimensions";
-    /** NBT 键名：槽位管理器数据 */
-    private static final String KEY_SLOT_MANAGER = "slots";
+
+    // ──────────────────────────────────────────────────────────────────
+    //  DataCluster 缓存（新版逐玩家存储）
+    // ──────────────────────────────────────────────────────────────────
+
+    private static final Map<UUID, DataCluster> clusters = new ConcurrentHashMap<>();
 
     private RtsWorkflowStore() {
     }
 
     // ──────────────────────────────────────────────────────────────────
-    //  保存 — 持久化所有玩家的工作流数据
+    //  新版 API（逐玩家 DataCluster）
     // ──────────────────────────────────────────────────────────────────
 
     /**
-     * 保存所有玩家在所有维度上的工作流槽位管理器到世界存档文件。
+     * 保存所有玩家在所有维度上的工作流槽位管理器。
      *
-     * @param server   Minecraft 服务器实例（用于获取存档路径）
+     * <p>每个玩家的数据写入选 {@code rtsbuilding/players/{uuid}/workflow.dat}，
+     * 通过 {@link DataCluster#set(DataComponent, Object)} 标记脏，
+     * 由调用方在适当时机刷盘。
+     *
+     * @param server   Minecraft 服务器实例
      * @param allSlots 玩家 UUID → 维度 → 槽位管理器的映射
      */
-    public static synchronized void saveAll(MinecraftServer server,
-                                            Map<UUID, Map<ResourceKey<Level>, RtsWorkflowSlotManager>> allSlots) {
-        if (server == null || allSlots == null) {
-            return;
-        }
+    public static void saveAll(MinecraftServer server,
+                               Map<UUID, Map<ResourceKey<Level>, RtsWorkflowSlotManager>> allSlots) {
+        if (server == null || allSlots == null) return;
 
-        CompoundTag root = new CompoundTag();
-        root.putInt(KEY_DATA_VERSION, DATA_VERSION);
-
-        CompoundTag players = new CompoundTag();
         for (Map.Entry<UUID, Map<ResourceKey<Level>, RtsWorkflowSlotManager>> playerEntry : allSlots.entrySet()) {
             UUID playerId = playerEntry.getKey();
             Map<ResourceKey<Level>, RtsWorkflowSlotManager> dimSlots = playerEntry.getValue();
-            if (dimSlots == null || dimSlots.isEmpty()) {
-                continue;
-            }
+            if (dimSlots == null || dimSlots.isEmpty()) continue;
 
-            CompoundTag playerTag = new CompoundTag();
             CompoundTag dimensions = new CompoundTag();
             boolean hasData = false;
 
             for (Map.Entry<ResourceKey<Level>, RtsWorkflowSlotManager> dimEntry : dimSlots.entrySet()) {
                 ResourceKey<Level> dimension = dimEntry.getKey();
                 RtsWorkflowSlotManager slots = dimEntry.getValue();
-                if (slots == null || slots.occupiedCount() == 0) {
-                    continue;
-                }
+                if (slots == null || slots.occupiedCount() == 0) continue;
+
                 CompoundTag slotsTag = slots.saveToNbt();
-                if (slotsTag != null) {
+                if (slotsTag != null && !slotsTag.isEmpty()) {
                     dimensions.put(dimension.location().toString(), slotsTag);
                     hasData = true;
                 }
             }
 
             if (hasData) {
-                playerTag.put(KEY_DIMENSIONS, dimensions);
-                players.put(playerId.toString(), playerTag);
+                CompoundTag playerData = new CompoundTag();
+                playerData.put(KEY_DIMENSIONS, dimensions);
+                cluster(server, playerId).set(WorkflowComponents.FULL_WORKFLOW, playerData);
             }
         }
 
-        root.put(KEY_PLAYERS, players);
-        writeAll(server, root);
+        // 关键事件后立即刷盘，确保数据落盘
+        flushAll();
     }
 
-    // ──────────────────────────────────────────────────────────────────
-    //  加载 — 恢复单个玩家的工作流数据
-    // ──────────────────────────────────────────────────────────────────
-
     /**
-     * 从世界存档文件中加载指定玩家的工作流槽位管理器。
+     * 从存储中加载指定玩家的工作流槽位管理器。
+     *
+     * <p>优先从新版的逐玩家 {@link DataCluster} 加载，
+     * 如果不存在（首次迁移后遗留数据），回退到旧版全量文件。
      *
      * @param server   Minecraft 服务器实例
      * @param playerId 玩家的 UUID
-     * @return 维度 → 槽位管理器的映射（没有保存的数据则返回空映射）
+     * @return 维度 → 槽位管理器的映射
      */
-    public static synchronized Map<ResourceKey<Level>, RtsWorkflowSlotManager> loadPlayer(
+    public static Map<ResourceKey<Level>, RtsWorkflowSlotManager> loadPlayer(
             MinecraftServer server, UUID playerId) {
+        // 尝试新版逐玩家文件
+        DataCluster dc = cluster(server, playerId);
+        CompoundTag root = dc.get(WorkflowComponents.FULL_WORKFLOW);
+        if (!root.isEmpty() && root.contains(KEY_DIMENSIONS)) {
+            return deserializeDimensions(root.getCompound(KEY_DIMENSIONS));
+        }
+
+        // 回退：尝试旧版全量文件
+        return loadPlayerLegacy(server, playerId);
+    }
+
+    /**
+     * 强制刷盘指定玩家的工作流数据。
+     */
+    public static void flushPlayer(UUID playerId) {
+        DataCluster dc = clusters.get(playerId);
+        if (dc != null) {
+            dc.flush();
+        }
+    }
+
+    /**
+     * 强制刷盘所有已缓存的工作流数据。
+     */
+    public static void flushAll() {
+        for (Map.Entry<UUID, DataCluster> entry : clusters.entrySet()) {
+            try {
+                entry.getValue().flush();
+            } catch (Exception e) {
+                RtsbuildingMod.LOGGER.error("刷写工作流数据失败（玩家 {}）: {}", entry.getKey(), e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * 移除指定玩家的工作流 DataCluster 缓存。
+     */
+    public static void removePlayer(UUID playerId) {
+        DataCluster dc = clusters.remove(playerId);
+        if (dc != null) {
+            dc.flushAndClose();
+        }
+    }
+
+    // ──────────────────────────────────────────────────────────────────
+    //  内部方法
+    // ──────────────────────────────────────────────────────────────────
+
+    private static DataCluster cluster(MinecraftServer server, UUID playerId) {
+        return clusters.computeIfAbsent(playerId, id -> {
+            var store = new RtsAtomicNbtStore(server, "rtsbuilding/players/" + id, "workflow.dat");
+            return new DataCluster(store);
+        });
+    }
+
+    private static Map<ResourceKey<Level>, RtsWorkflowSlotManager> deserializeDimensions(CompoundTag dimensions) {
         Map<ResourceKey<Level>, RtsWorkflowSlotManager> result = new HashMap<>();
-        if (server == null || playerId == null) {
-            return result;
-        }
-
-        CompoundTag root = loadAll(server);
-        if (root.isEmpty()) {
-            return result;
-        }
-
-        CompoundTag players = root.getCompound(KEY_PLAYERS);
-        if (players.isEmpty()) {
-            return result;
-        }
-
-        String playerKey = playerId.toString();
-        if (!players.contains(playerKey)) {
-            return result;
-        }
-
-        CompoundTag playerTag = players.getCompound(playerKey);
-        CompoundTag dimensions = playerTag.getCompound(KEY_DIMENSIONS);
         for (String dimKey : dimensions.getAllKeys()) {
             ResourceLocation dimLocation = ResourceLocation.tryParse(dimKey);
-            if (dimLocation == null) {
-                continue;
-            }
+            if (dimLocation == null) continue;
+
             ResourceKey<Level> dimension = ResourceKey.create(Registries.DIMENSION, dimLocation);
             CompoundTag slotsTag = dimensions.getCompound(dimKey);
             if (slotsTag != null && !slotsTag.isEmpty()) {
@@ -151,81 +181,61 @@ public final class RtsWorkflowStore {
                 }
             }
         }
-
         return result;
     }
 
     // ──────────────────────────────────────────────────────────────────
-    //  文件 I/O
+    //  旧版全量文件回退
     // ──────────────────────────────────────────────────────────────────
 
-    private static final String KEY_REGISTRY = "minecraft:dimension_type";
+    private static Map<ResourceKey<Level>, RtsWorkflowSlotManager> loadPlayerLegacy(
+            MinecraftServer server, UUID playerId) {
+        Map<ResourceKey<Level>, RtsWorkflowSlotManager> result = new HashMap<>();
+        if (server == null || playerId == null) return result;
 
-    /**
-     * 从维度字符串表示解析出对应的 {@link ResourceKey}。
-     */
-    private static ResourceKey<Level> parseDimensionKey(String dimKey) {
-        ResourceLocation location = ResourceLocation.tryParse(dimKey);
-        if (location == null) {
-            return Level.OVERWORLD;
-        }
-        return ResourceKey.create(Registries.DIMENSION, location);
-    }
+        var legacyStore = new RtsAtomicNbtStore(server, DIRECTORY, FILE_NAME);
+        CompoundTag root = legacyStore.read();
+        if (root.isEmpty()) return result;
 
-    /** 从世界存档文件加载所有工作流数据 */
-    private static CompoundTag loadAll(MinecraftServer server) {
-        Path path = storagePath(server);
-        if (!Files.isRegularFile(path)) {
-            return emptyRoot();
-        }
-        try {
-            CompoundTag root = NbtIo.readCompressed(path, NbtAccounter.unlimitedHeap());
-            if (root == null) {
-                return emptyRoot();
+        CompoundTag players = root.getCompound(KEY_PLAYERS);
+        if (players.isEmpty()) return result;
+
+        String playerKey = playerId.toString();
+        if (!players.contains(playerKey)) return result;
+
+        CompoundTag playerTag = players.getCompound(playerKey);
+        CompoundTag dimensions = playerTag.getCompound(KEY_DIMENSIONS);
+        result.putAll(deserializeDimensions(dimensions));
+
+        // 迁移：从旧文件中删除该玩家数据，写回新版
+        if (!result.isEmpty()) {
+            players.remove(playerKey);
+            if (players.isEmpty()) {
+                CompoundTag newRoot = new CompoundTag();
+                newRoot.putInt(KEY_DATA_VERSION, DATA_VERSION);
+                newRoot.put(KEY_PLAYERS, new CompoundTag());
+                legacyStore.write(newRoot);
+            } else {
+                root.put(KEY_PLAYERS, players);
+                legacyStore.write(root);
             }
-            if (!root.contains(KEY_PLAYERS)) {
-                root.put(KEY_PLAYERS, new CompoundTag());
+
+            // 将迁移后的数据写入新版文件
+            CompoundTag playerData = new CompoundTag();
+            CompoundTag dims = new CompoundTag();
+            for (Map.Entry<ResourceKey<Level>, RtsWorkflowSlotManager> entry : result.entrySet()) {
+                CompoundTag slotsTag = entry.getValue().saveToNbt();
+                if (slotsTag != null) {
+                    dims.put(entry.getKey().location().toString(), slotsTag);
+                }
             }
-            return root;
-        } catch (IOException | RuntimeException ignored) {
-            return emptyRoot();
+            playerData.put(KEY_DIMENSIONS, dims);
+            cluster(server, playerId).set(WorkflowComponents.FULL_WORKFLOW, playerData);
+            cluster(server, playerId).flush();
+
+            RtsbuildingMod.LOGGER.info("[Workflow] 已迁移玩家 {} 的工作流数据到新版格式", playerId);
         }
-    }
 
-    /** 创建空的根标签，包含默认数据版本和空的玩家映射 */
-    private static CompoundTag emptyRoot() {
-        CompoundTag root = new CompoundTag();
-        root.putInt(KEY_DATA_VERSION, DATA_VERSION);
-        root.put(KEY_PLAYERS, new CompoundTag());
-        return root;
-    }
-
-    /**
-     * 将所有工作流数据写入文件。
-     * 使用先写临时文件再原子移动的方式，防止写入过程中崩溃导致数据损坏。
-     */
-    private static void writeAll(MinecraftServer server, CompoundTag root) {
-        Path path = storagePath(server);
-        Path tempPath = path.resolveSibling(TEMP_FILE_NAME);
-        try {
-            Files.createDirectories(path.getParent());
-            NbtIo.writeCompressed(root, tempPath);
-            try {
-                Files.move(tempPath, path, StandardCopyOption.REPLACE_EXISTING,
-                        StandardCopyOption.ATOMIC_MOVE);
-            } catch (IOException atomicMoveFailed) {
-                Files.move(tempPath, path, StandardCopyOption.REPLACE_EXISTING);
-            }
-        } catch (IOException | RuntimeException ignored) {
-            try {
-                Files.deleteIfExists(tempPath);
-            } catch (IOException ignored1) {
-            }
-        }
-    }
-
-    /** 获取工作流数据文件的存储路径 */
-    private static Path storagePath(MinecraftServer server) {
-        return server.getWorldPath(LevelResource.ROOT).resolve(DIRECTORY).resolve(FILE_NAME);
+        return result;
     }
 }

@@ -1,11 +1,7 @@
 package com.rtsbuilding.rtsbuilding.server.storage.session;
 
 import com.rtsbuilding.rtsbuilding.common.build.BuilderMode;
-import com.rtsbuilding.rtsbuilding.server.storage.state.RtsDestructionState;
-import com.rtsbuilding.rtsbuilding.server.storage.state.RtsFunnelState;
-import com.rtsbuilding.rtsbuilding.server.storage.state.RtsMiningState;
-import com.rtsbuilding.rtsbuilding.server.storage.state.RtsPlacementState;
-import com.rtsbuilding.rtsbuilding.server.storage.state.RtsTransferState;
+import com.rtsbuilding.rtsbuilding.server.storage.state.*;
 
 /**
  * 玩家 RTS 存储会话的<strong>可变状态容器</strong>（聚合根）。

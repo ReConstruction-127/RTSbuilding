@@ -25,9 +25,10 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.state.BlockState;
 
 import javax.annotation.Nullable;
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.Supplier;
+import java.util.ArrayList;
+import java.util.Deque;
+import java.util.List;
+import java.util.Map;
 
 /**
  * State machine for single-block remote mining progress.

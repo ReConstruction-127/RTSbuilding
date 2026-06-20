@@ -10,7 +10,6 @@ import com.rtsbuilding.rtsbuilding.server.pipeline.sync.NetworkSyncPipe;
 import com.rtsbuilding.rtsbuilding.server.pipeline.tool.ToolBorrowPipe;
 import com.rtsbuilding.rtsbuilding.server.pipeline.workflow.WorkflowStartPipe;
 import com.rtsbuilding.rtsbuilding.server.service.destruction.RtsDestructionBatch;
-import com.rtsbuilding.rtsbuilding.server.service.mining.RtsMiningStateMachine;
 import com.rtsbuilding.rtsbuilding.server.service.mining.RtsMiningValidator;
 import com.rtsbuilding.rtsbuilding.server.service.mining.RtsToolLease;
 import com.rtsbuilding.rtsbuilding.server.service.mining.RtsUltimineProcessor;

@@ -2,22 +2,22 @@ package com.rtsbuilding.rtsbuilding.client.screen.panel;
 
 
 import com.rtsbuilding.rtsbuilding.Config;
-import com.rtsbuilding.rtsbuilding.client.screen.blueprint.BlueprintPanel;
 import com.rtsbuilding.rtsbuilding.client.controller.ClientRtsController;
 import com.rtsbuilding.rtsbuilding.client.popup.RtsCraftFeedbackPopup;
 import com.rtsbuilding.rtsbuilding.client.record.CraftableEntry;
 import com.rtsbuilding.rtsbuilding.client.record.FluidEntry;
 import com.rtsbuilding.rtsbuilding.client.record.RecentEntry;
 import com.rtsbuilding.rtsbuilding.client.record.StorageEntry;
+import com.rtsbuilding.rtsbuilding.client.screen.blueprint.BlueprintPanel;
 import com.rtsbuilding.rtsbuilding.client.screen.layout.BottomPanelLayoutTypes;
 import com.rtsbuilding.rtsbuilding.client.screen.layout.CategoryTypes;
 import com.rtsbuilding.rtsbuilding.client.screen.layout.PanelLayouts;
 import com.rtsbuilding.rtsbuilding.client.screen.standalone.BuilderScreen;
 import com.rtsbuilding.rtsbuilding.client.screen.standalone.RtsPluginManagementScreen;
-import com.rtsbuilding.rtsbuilding.common.persist.RtsClientUiStateStore;
 import com.rtsbuilding.rtsbuilding.client.util.RtsClientUiUtil;
 import com.rtsbuilding.rtsbuilding.client.util.RtsCraftablesUiHelper;
 import com.rtsbuilding.rtsbuilding.client.util.RtsCreativeItemCatalog;
+import com.rtsbuilding.rtsbuilding.common.persist.RtsClientUiStateStore;
 import com.rtsbuilding.rtsbuilding.network.storage.RtsStorageSort;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;

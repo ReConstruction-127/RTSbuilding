@@ -2,10 +2,8 @@ package com.rtsbuilding.rtsbuilding.server.service.placement;
 
 import com.rtsbuilding.rtsbuilding.network.storage.S2CRtsStoragePagePayload;
 import com.rtsbuilding.rtsbuilding.server.progression.RtsFeature;
-import com.rtsbuilding.rtsbuilding.server.data.PlacedBlockTrackerData;
 import com.rtsbuilding.rtsbuilding.server.progression.RtsProgressionManager;
 import com.rtsbuilding.rtsbuilding.server.service.ServiceRegistry;
-import com.rtsbuilding.rtsbuilding.server.service.placement.BlockPlacer;
 import com.rtsbuilding.rtsbuilding.server.service.transfer.RtsTransferInserter;
 import com.rtsbuilding.rtsbuilding.server.storage.RtsStoragePageBuilder;
 import com.rtsbuilding.rtsbuilding.server.storage.model.LinkedHandler;
@@ -21,7 +19,6 @@ import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.context.BlockPlaceContext;
-import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.neoforged.neoforge.items.IItemHandler;

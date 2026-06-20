@@ -1,16 +1,16 @@
 package com.rtsbuilding.rtsbuilding.client.network;
 
 
-import com.rtsbuilding.rtsbuilding.client.screen.blueprint.BlueprintPanel;
-import com.rtsbuilding.rtsbuilding.network.blueprint.S2CBlueprintStatusPayload;
 import com.rtsbuilding.rtsbuilding.client.controller.ClientRtsController;
 import com.rtsbuilding.rtsbuilding.client.rendering.animation.ClientFakeAirBlocks;
 import com.rtsbuilding.rtsbuilding.client.rendering.animation.PlacementAnimationRenderer;
 import com.rtsbuilding.rtsbuilding.client.rendering.builder.ShapeGhostRenderer;
+import com.rtsbuilding.rtsbuilding.client.screen.blueprint.BlueprintPanel;
 import com.rtsbuilding.rtsbuilding.client.screen.handler.PlacementHistoryManager;
 import com.rtsbuilding.rtsbuilding.client.screen.standalone.BuilderScreen;
 import com.rtsbuilding.rtsbuilding.client.screen.workflow.RtsBlueprintResumePanel;
 import com.rtsbuilding.rtsbuilding.client.screen.workflow.RtsResumePlacementPanel;
+import com.rtsbuilding.rtsbuilding.network.blueprint.S2CBlueprintStatusPayload;
 import com.rtsbuilding.rtsbuilding.network.builder.*;
 import com.rtsbuilding.rtsbuilding.network.camera.S2CRtsCameraAnchorPayload;
 import com.rtsbuilding.rtsbuilding.network.camera.S2CRtsCameraStatePayload;

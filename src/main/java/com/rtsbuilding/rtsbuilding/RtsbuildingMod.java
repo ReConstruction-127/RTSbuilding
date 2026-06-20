@@ -8,6 +8,7 @@ import com.rtsbuilding.rtsbuilding.common.RtsEntities;
 import com.rtsbuilding.rtsbuilding.common.RtsItems;
 import com.rtsbuilding.rtsbuilding.server.api.impl.RtsAPIImpl;
 import com.rtsbuilding.rtsbuilding.server.camera.RtsCameraManager;
+import com.rtsbuilding.rtsbuilding.server.data.SaveScheduler;
 import com.rtsbuilding.rtsbuilding.server.feedback.RtsDamageFeedbackManager;
 import com.rtsbuilding.rtsbuilding.server.history.ServerHistoryManager;
 import com.rtsbuilding.rtsbuilding.server.pipeline.core.RtsPipelineRegistration;
@@ -188,6 +189,8 @@ public class RtsbuildingMod {
             ServerTickOrchestrator.getInstance().warmCreativeTabCaches(event.getServer());
             // 清理所有维度的孤儿相机实体
             RtsCameraManager.cleanupOrphanCameras(event.getServer());
+            // 清理旧版全量文件（迁移完毕后删除）
+            SaveScheduler.INSTANCE.cleanupLegacyFiles(event.getServer());
         }
 
         /**
@@ -203,6 +206,8 @@ public class RtsbuildingMod {
          */
         @SubscribeEvent
         static void onServerStopped(ServerStoppedEvent event) {
+            // 刷新所有持久化数据
+            SaveScheduler.INSTANCE.onServerStopped();
             // 将所有活跃工作流保存到世界存档（在清空前执行）
             RtsWorkflowEngine.getInstance().saveAll(event.getServer());
             // 清空引擎内存，防止切换世界时旧世界的数据残留
@@ -245,6 +250,8 @@ public class RtsbuildingMod {
                 RtsPluginService.syncRelatedPlayers(serverPlayer);
                 // 清空撤销历史 —— 旧世界的 BlockPos 不适用于新世界
                 ServerHistoryManager.clear(serverPlayer.getUUID());
+                // 持久化该玩家的数据
+                SaveScheduler.INSTANCE.onPlayerLogout(serverPlayer);
             }
         }
 
@@ -306,6 +313,8 @@ public class RtsbuildingMod {
          */
         @SubscribeEvent
         static void onServerTick(ServerTickEvent.Post event) {
+            // 定期刷新持久化缓存
+            SaveScheduler.INSTANCE.onTick(event.getServer());
             // 驱动全局挖掘任务的每 Tick 消耗
             ServerTickOrchestrator.getInstance().tickMining(event.getServer());
         }

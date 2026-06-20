@@ -113,7 +113,7 @@ public final class VanillaStructureNbtReader {
     /** 读取并解压 NBT 数据 */
     private static CompoundTag readCompressed(byte[] data, String fileName) throws BlueprintParseException {
         try {
-            return NbtIo.readCompressed(new ByteArrayInputStream(data), NbtAccounter.unlimitedHeap());
+            return NbtIo.readCompressed(new ByteArrayInputStream(data), NbtAccounter.create(128L * 1024L * 1024L));
         } catch (Exception ex) {
             throw new BlueprintParseException("读取压缩 NBT 蓝图失败: " + fileName, ex);
         }

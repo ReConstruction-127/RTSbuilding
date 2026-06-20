@@ -2,17 +2,13 @@ package com.rtsbuilding.rtsbuilding.client.screen.standalone;
 
 
 import com.mojang.blaze3d.platform.InputConstants;
-import com.rtsbuilding.rtsbuilding.client.screen.blueprint.BlueprintMaterialWindowPanel;
-import com.rtsbuilding.rtsbuilding.client.screen.blueprint.BlueprintNameWindowPanel;
-import com.rtsbuilding.rtsbuilding.client.screen.blueprint.BlueprintPanel;
-import com.rtsbuilding.rtsbuilding.client.screen.blueprint.BlueprintWindowPanel;
 import com.rtsbuilding.rtsbuilding.client.bootstrap.ClientKeyMappings;
 import com.rtsbuilding.rtsbuilding.client.controller.ClientRtsController;
 import com.rtsbuilding.rtsbuilding.client.network.RtsClientPacketGateway;
 import com.rtsbuilding.rtsbuilding.client.pathfinding.RtsClientPathfinding;
 import com.rtsbuilding.rtsbuilding.client.record.CraftableEntry;
 import com.rtsbuilding.rtsbuilding.client.rendering.util.RenderingUtil;
-import com.rtsbuilding.rtsbuilding.client.screen.blueprint.BlueprintGhostPreview;
+import com.rtsbuilding.rtsbuilding.client.screen.blueprint.*;
 import com.rtsbuilding.rtsbuilding.client.screen.craft.RtsCraftQuantityWindowPanel;
 import com.rtsbuilding.rtsbuilding.client.screen.funnel.FunnelBufferPanel;
 import com.rtsbuilding.rtsbuilding.client.screen.gear.GearMenuPanel;
@@ -43,10 +39,10 @@ import com.rtsbuilding.rtsbuilding.client.screen.workflow.RtsResumePlacementPane
 import com.rtsbuilding.rtsbuilding.client.screen.workflow.RtsWorkflowPanel;
 import com.rtsbuilding.rtsbuilding.client.service.MiningOperationService;
 import com.rtsbuilding.rtsbuilding.client.state.RtsScreenUiStateManager;
-import com.rtsbuilding.rtsbuilding.common.persist.RtsClientUiStateStore;
 import com.rtsbuilding.rtsbuilding.client.util.RtsClientUiUtil;
-import com.rtsbuilding.rtsbuilding.common.build.BuilderMode;
 import com.rtsbuilding.rtsbuilding.common.RtsUltimineCollector;
+import com.rtsbuilding.rtsbuilding.common.build.BuilderMode;
+import com.rtsbuilding.rtsbuilding.common.persist.RtsClientUiStateStore;
 import com.rtsbuilding.rtsbuilding.common.shape.model.ShapeFillMode;
 import com.rtsbuilding.rtsbuilding.compat.ae2.RtsAe2IconResolver;
 import net.minecraft.client.gui.Font;

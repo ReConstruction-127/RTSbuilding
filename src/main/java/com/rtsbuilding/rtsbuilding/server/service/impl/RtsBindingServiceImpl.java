@@ -3,7 +3,9 @@ package com.rtsbuilding.rtsbuilding.server.service.impl;
 import com.rtsbuilding.rtsbuilding.common.build.BuilderMode;
 import com.rtsbuilding.rtsbuilding.server.progression.RtsFeature;
 import com.rtsbuilding.rtsbuilding.server.progression.RtsProgressionManager;
-import com.rtsbuilding.rtsbuilding.server.service.*;
+import com.rtsbuilding.rtsbuilding.server.service.QuestService;
+import com.rtsbuilding.rtsbuilding.server.service.RtsRemoteMenuService;
+import com.rtsbuilding.rtsbuilding.server.service.ServiceRegistry;
 import com.rtsbuilding.rtsbuilding.server.service.api.BindingService;
 import com.rtsbuilding.rtsbuilding.server.service.transfer.RtsTransferInserter;
 import com.rtsbuilding.rtsbuilding.server.storage.RtsStorageBindings;
@@ -39,6 +41,7 @@ public final class RtsBindingServiceImpl implements BindingService {
         RtsStorageSession session = registry.session().getOrCreate(player);
         if (RtsStorageBindings.setMode(session, mode)) {
             registry.funnel().disableAndFlush(player, session);
+            registry.session().saveToPlayerNbt(player, session);
             registry.serviceOp().refreshPage(player, session);
         }
     }

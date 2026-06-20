@@ -1,6 +1,5 @@
 package com.rtsbuilding.rtsbuilding.server.history;
 
-import com.rtsbuilding.rtsbuilding.server.service.ServiceOperationTemplate;
 import com.rtsbuilding.rtsbuilding.server.service.ServiceRegistry;
 import com.rtsbuilding.rtsbuilding.server.service.transfer.RtsTransferInserter;
 import com.rtsbuilding.rtsbuilding.server.storage.model.LinkedHandler;

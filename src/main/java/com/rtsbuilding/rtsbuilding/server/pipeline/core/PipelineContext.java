@@ -6,7 +6,6 @@ import net.minecraft.server.level.ServerPlayer;
 
 import javax.annotation.Nullable;
 import java.util.*;
-import java.util.stream.Collectors;
 
 /**
  * 可变上下文对象，在 {@link WorkflowPipeline} 执行的每个 {@link PipelinePipe} 中传递。

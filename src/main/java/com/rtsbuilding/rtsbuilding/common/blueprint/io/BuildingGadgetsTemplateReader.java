@@ -174,7 +174,7 @@ final class BuildingGadgetsTemplateReader {
     private static CompoundTag readCompressedBody(String body, String fileName) throws BlueprintParseException {
         try {
             byte[] decoded = Base64.getDecoder().decode(body);
-            return NbtIo.readCompressed(new ByteArrayInputStream(decoded), NbtAccounter.unlimitedHeap());
+            return NbtIo.readCompressed(new ByteArrayInputStream(decoded), NbtAccounter.create(128L * 1024L * 1024L));
         } catch (Exception ex) {
             throw new BlueprintParseException("读取 Building Gadgets 模板 body 失败: " + fileName, ex);
         }

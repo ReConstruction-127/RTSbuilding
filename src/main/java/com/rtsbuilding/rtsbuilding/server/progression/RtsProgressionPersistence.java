@@ -2,7 +2,9 @@ package com.rtsbuilding.rtsbuilding.server.progression;
 
 import com.rtsbuilding.rtsbuilding.Config;
 import com.rtsbuilding.rtsbuilding.compat.ftb.RtsFtbCompat;
+import com.rtsbuilding.rtsbuilding.server.data.PlayerComponents;
 import com.rtsbuilding.rtsbuilding.server.data.RtsSharedProgressionData;
+import com.rtsbuilding.rtsbuilding.server.data.SaveScheduler;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -10,7 +12,6 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.scores.PlayerTeam;
 
 final class RtsProgressionPersistence {
-    static final String NBT_ROOT = "rtsbuilding_progression";
     static final String NBT_VERSION = "version";
     static final String NBT_HOME_POS = "home_pos";
     static final String NBT_HOME_DIMENSION = "home_dimension";
@@ -20,12 +21,16 @@ final class RtsProgressionPersistence {
     }
 
     static CompoundTag root(ServerPlayer player) {
-        CompoundTag root = player.getPersistentData().getCompound(NBT_ROOT);
+        CompoundTag root = SaveScheduler.INSTANCE.player(player).get(PlayerComponents.PROGRESSION);
         if (root.isEmpty()) {
             root.putInt(NBT_VERSION, 1);
-            player.getPersistentData().put(NBT_ROOT, root);
+            SaveScheduler.INSTANCE.player(player).set(PlayerComponents.PROGRESSION, root);
         }
         return root;
+    }
+
+    static void save(ServerPlayer player, CompoundTag root) {
+        SaveScheduler.INSTANCE.player(player).set(PlayerComponents.PROGRESSION, root);
     }
 
     static String sharedProgressionKey(ServerPlayer player) {

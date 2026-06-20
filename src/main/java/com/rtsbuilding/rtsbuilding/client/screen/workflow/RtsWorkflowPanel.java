@@ -3,11 +3,9 @@ package com.rtsbuilding.rtsbuilding.client.screen.workflow;
 import com.rtsbuilding.rtsbuilding.client.controller.ClientRtsController;
 import com.rtsbuilding.rtsbuilding.client.screen.panel.RtsWindowPanel;
 import com.rtsbuilding.rtsbuilding.client.screen.standalone.BuilderScreen;
+import com.rtsbuilding.rtsbuilding.client.util.RtsClientUiUtil;
 import com.rtsbuilding.rtsbuilding.common.persist.PersistableProperty;
 import com.rtsbuilding.rtsbuilding.common.persist.RtsClientUiStateStore;
-import com.rtsbuilding.rtsbuilding.client.util.RtsClientUiUtil;
-
-import java.util.List;
 import com.rtsbuilding.rtsbuilding.network.builder.C2SRtsDeleteWorkflowPayload;
 import com.rtsbuilding.rtsbuilding.network.builder.C2SRtsPauseWorkflowPayload;
 import com.rtsbuilding.rtsbuilding.network.builder.C2SRtsScanBlueprintResumePayload;
@@ -19,6 +17,8 @@ import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.neoforged.neoforge.network.PacketDistributor;
+
+import java.util.List;
 
 import static com.rtsbuilding.rtsbuilding.client.screen.standalone.BuilderScreenConstants.TOP_H;
 
