@@ -163,7 +163,7 @@ public final class RtsTransferPlayerIntegration {
             return;
         }
         RtsLinkedStorageResolver.sanitizeSessionDimension(player, session);
-        if (session.linkedStorageInfo.isEmpty()) {
+        if (!RtsLinkedStorageResolver.hasAnyStorage(player, session)) {
             return;
         }
         AbstractContainerMenu menu = player.containerMenu;

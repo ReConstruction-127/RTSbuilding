@@ -38,6 +38,8 @@ public final class ShapeGeometryUtil {
             case SQUARE -> addSquareTargets(targets, start, end, input.planeFace(), fillMode);
             case WALL -> addWallTargets(targets, start, end, input.boxHeightOffset(), fillMode, input.connectedLine());
             case CIRCLE -> addCircleTargets(targets, start, end, input.planeFace(), fillMode);
+            case CYLINDER -> addCylinderTargets(targets, start, end, input.boxHeightOffset(), input.planeFace(), fillMode);
+            case BALL -> addBallTargets(targets, start, end, fillMode);
             case BOX -> addBoxTargets(targets, start, end, input.boxHeightOffset(), fillMode);
             default -> targets.add(start);
         }
@@ -234,32 +236,76 @@ public final class ShapeGeometryUtil {
         int a = dotDelta(dx, dy, dz, axes[0]);
         int b = dotDelta(dx, dy, dz, axes[1]);
         int radius = Mth.clamp((int) Math.round(Math.sqrt((a * (double) a) + (b * (double) b))), 0, BuilderScreenConstants.SHAPE_MAX_RADIUS);
-        int outer2 = radius * radius;
-        int inner = Math.max(0, radius - 1);
-        int inner2 = inner * inner;
         Set<PlaneCell> rotatedCells = new HashSet<>();
-
-        for (int ia = -radius; ia <= radius; ia++) {
-            for (int ib = -radius; ib <= radius; ib++) {
-                int dist2 = (ia * ia) + (ib * ib);
-                boolean inOuter = dist2 <= outer2;
-                boolean inInner = dist2 < inner2;
-                if (!inOuter || ((fillMode != ShapeFillMode.FILL) && inInner)) {
-                    continue;
-                }
-                RotatedOffset rotated = rotatePlaneOffset(ia, ib, 0.0D, 0.0D, degrees);
-                rotatedCells.add(new PlaneCell(rotated.a(), rotated.b()));
-            }
-        }
-
-        if (fillMode == ShapeFillMode.FILL) {
-            rotatedCells = fillPlaneInteriorHoles(rotatedCells);
+        for (PlaneCell cell : buildCircleCells(radius, fillMode == ShapeFillMode.FILL)) {
+            RotatedOffset rotated = rotatePlaneOffset(cell.a(), cell.b(), 0.0D, 0.0D, degrees);
+            rotatedCells.add(new PlaneCell(rotated.a(), rotated.b()));
         }
 
         // 先收集到列表，再按距点击点距离排序
         List<BlockPos> positions = new ArrayList<>();
         for (PlaneCell cell : rotatedCells) {
             positions.add(offsetPos(start, axes[0], cell.a(), axes[1], cell.b()));
+        }
+        positions.sort(Comparator.comparingDouble(pos -> pos.distSqr(start)));
+        targets.addAll(positions);
+    }
+
+    /** 生成圆柱体方块：圆形底面 + 高度偏移 */
+    public static void addCylinderTargets(Set<BlockPos> targets, BlockPos start, BlockPos end, int heightOffset,
+            Direction face, ShapeFillMode fillMode) {
+        Direction[] axes = resolveShapePlaneAxes(BuildShape.CYLINDER, face);
+        int dx = end.getX() - start.getX();
+        int dy = end.getY() - start.getY();
+        int dz = end.getZ() - start.getZ();
+        int a = dotDelta(dx, dy, dz, axes[0]);
+        int b = dotDelta(dx, dy, dz, axes[1]);
+        int radius = Mth.clamp((int) Math.round(Math.sqrt((a * (double) a) + (b * (double) b))),
+                0, BuilderScreenConstants.SHAPE_MAX_RADIUS);
+        Set<PlaneCell> filledBase = buildCircleCells(radius, true);
+        Set<PlaneCell> shellBase = buildCircleCells(radius, false);
+        int yOffset = clampShapeOffset(heightOffset);
+        int minY = Math.min(0, yOffset);
+        int maxY = Math.max(0, yOffset);
+        boolean fill = fillMode == ShapeFillMode.FILL;
+        boolean singleLayer = minY == maxY;
+
+        for (int iy = minY; iy <= maxY; iy++) {
+            boolean capLayer = iy == minY || iy == maxY;
+            List<BlockPos> layerPositions = new ArrayList<>();
+            for (PlaneCell cell : filledBase) {
+                if (fill || (!singleLayer && capLayer) || shellBase.contains(cell)) {
+                    layerPositions.add(offsetPos(start.above(iy), axes[0], cell.a(), axes[1], cell.b()));
+                }
+            }
+            layerPositions.sort(Comparator.comparingDouble(pos -> pos.distSqr(start)));
+            targets.addAll(layerPositions);
+        }
+    }
+
+    /** 生成球体方块：A 点为球心，B 点决定半径 */
+    public static void addBallTargets(Set<BlockPos> targets, BlockPos start, BlockPos end, ShapeFillMode fillMode) {
+        int dx = end.getX() - start.getX();
+        int dy = end.getY() - start.getY();
+        int dz = end.getZ() - start.getZ();
+        int radius = Mth.clamp((int) Math.round(Math.sqrt(
+                dx * (double) dx + dy * (double) dy + dz * (double) dz)),
+                0, BuilderScreenConstants.SHAPE_MAX_RADIUS);
+        int outer2 = radius * radius;
+        int inner = Math.max(0, radius - 1);
+        int inner2 = inner * inner;
+        boolean fill = fillMode == ShapeFillMode.FILL;
+        List<BlockPos> positions = new ArrayList<>();
+
+        for (int y = -radius; y <= radius; y++) {
+            for (int x = -radius; x <= radius; x++) {
+                for (int z = -radius; z <= radius; z++) {
+                    int dist2 = (x * x) + (y * y) + (z * z);
+                    if (dist2 <= outer2 && (fill || dist2 >= inner2)) {
+                        positions.add(start.offset(x, y, z));
+                    }
+                }
+            }
         }
         positions.sort(Comparator.comparingDouble(pos -> pos.distSqr(start)));
         targets.addAll(positions);
@@ -356,6 +402,23 @@ public final class ShapeGeometryUtil {
     }
 
     // ======================== 实用方法 ========================
+
+    /** 构建圆形平面单元格；fill=false 时只返回外圈。 */
+    public static Set<PlaneCell> buildCircleCells(int radius, boolean fill) {
+        int outer2 = radius * radius;
+        int inner = Math.max(0, radius - 1);
+        int inner2 = inner * inner;
+        Set<PlaneCell> cells = new HashSet<>();
+        for (int a = -radius; a <= radius; a++) {
+            for (int b = -radius; b <= radius; b++) {
+                int dist2 = (a * a) + (b * b);
+                if (dist2 <= outer2 && (fill || dist2 >= inner2)) {
+                    cells.add(new PlaneCell(a, b));
+                }
+            }
+        }
+        return fill ? fillPlaneInteriorHoles(cells) : cells;
+    }
 
     /** 检查是否平面边界单元格 */
     public static boolean isPlaneBoundaryCell(Set<PlaneCell> filledCells, PlaneCell cell) {
@@ -536,7 +599,7 @@ public final class ShapeGeometryUtil {
     public static Direction resolveShapeBuildFace(BuildShape shape, Direction clickedFace, Vec3 rayDir) {
         if (shape == null) return clickedFace == null ? Direction.UP : clickedFace;
         return switch (shape) {
-            case LINE, SQUARE, WALL, BOX -> Direction.UP;
+            case LINE, SQUARE, WALL, CYLINDER, BOX -> Direction.UP;
             default -> clickedFace == null ? Direction.UP : clickedFace;
         };
     }
@@ -549,7 +612,7 @@ public final class ShapeGeometryUtil {
 
     /** 解析形状的平面轴向 */
     public static Direction[] resolveShapePlaneAxes(BuildShape shape, Direction face) {
-        if (shape == BuildShape.SQUARE || shape == BuildShape.BOX) {
+        if (shape == BuildShape.SQUARE || shape == BuildShape.CYLINDER || shape == BuildShape.BOX) {
             return new Direction[] { Direction.EAST, Direction.SOUTH };
         }
         if (shape == BuildShape.WALL) {
@@ -563,9 +626,9 @@ public final class ShapeGeometryUtil {
         };
     }
 
-    /** 判断形状是否需要第三点（仅立方体需要） */
+    /** 判断形状是否需要第三阶段高度调整。 */
     public static boolean requiresThirdPoint(BuildShape shape) {
-        return shape == BuildShape.BOX;
+        return shape == BuildShape.CYLINDER || shape == BuildShape.BOX;
     }
 
     // ======================== 放置命中结果生成 ========================
@@ -584,7 +647,7 @@ public final class ShapeGeometryUtil {
         if (shape == null) return List.of(ShapeFillMode.FILL);
         return switch (shape) {
             case LINE -> List.of(ShapeFillMode.FILL);
-            case SQUARE, WALL, CIRCLE -> List.of(ShapeFillMode.FILL, ShapeFillMode.HOLLOW);
+            case SQUARE, WALL, CIRCLE, CYLINDER, BALL -> List.of(ShapeFillMode.FILL, ShapeFillMode.HOLLOW);
             case BOX -> List.of(ShapeFillMode.FILL, ShapeFillMode.HOLLOW, ShapeFillMode.SKELETON);
             default -> List.of(ShapeFillMode.FILL);
         };

@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RtsCullingManagerTest {
@@ -120,6 +121,12 @@ class RtsCullingManagerTest {
         manager.handleWorldAction(null, origin, direction);
         assertEquals(Direction.UP, manager.activeHandleDirection());
 
+        manager.handleWorldAction(null, origin, direction);
+        assertNull(manager.activeHandleDirection());
+        assertFalse(manager.handleScroll(1.0D, false), "clicking the gold handle again should release the wheel");
+
+        manager.handleWorldAction(null, origin, direction);
+        assertEquals(Direction.UP, manager.activeHandleDirection());
         assertTrue(manager.handleScroll(1.0D, false));
 
         RtsCullingBox box = manager.boxes().get(0);
@@ -156,6 +163,32 @@ class RtsCullingManagerTest {
         assertEquals(63, box.min().getY());
         assertEquals(64, box.max().getY());
         assertEquals(2, box.height());
+    }
+
+    @Test
+    void activeAxisHandleCanResizeByDragging() {
+        RtsCullingManager manager = new RtsCullingManager();
+        manager.setManagementMode(true);
+
+        clickBlock(manager, new BlockPos(10, 64, 10));
+        manager.confirmDraft();
+
+        Vec3 origin = new Vec3(10.5D, 67.0D, 10.5D);
+        Vec3 direction = new Vec3(0.0D, -1.0D, 0.0D);
+        manager.handleWorldAction(null, origin, direction);
+
+        assertEquals(Direction.UP, manager.activeHandleDirection());
+        assertTrue(manager.handleActiveHandleDrag(0.0D, -18.0D, 0.0D, -1.0D));
+
+        RtsCullingBox box = manager.boxes().get(0);
+        assertEquals(new BlockPos(10, 64, 10), box.min());
+        assertEquals(new BlockPos(10, 65, 10), box.max());
+
+        assertTrue(manager.handleActiveHandleDrag(0.0D, 18.0D, 0.0D, -1.0D));
+
+        box = manager.boxes().get(0);
+        assertEquals(new BlockPos(10, 64, 10), box.min());
+        assertEquals(new BlockPos(10, 64, 10), box.max());
     }
 
     private static void clickBlock(RtsCullingManager manager, BlockPos pos) {

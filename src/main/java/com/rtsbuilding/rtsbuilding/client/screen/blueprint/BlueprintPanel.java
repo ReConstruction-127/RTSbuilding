@@ -21,6 +21,8 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.network.PacketDistributor;
 import org.lwjgl.PointerBuffer;
 import org.lwjgl.system.MemoryStack;
@@ -214,11 +216,11 @@ public final class BlueprintPanel {
     }
 
     static BlockPos nameDialogCapturePointA() {
-        return CAPTURE.pointA();
+        return CAPTURE.displayPointA();
     }
 
     static BlockPos nameDialogCapturePointB() {
-        return CAPTURE.previewPointB();
+        return CAPTURE.displayPointB();
     }
 
     static long nameDialogCaptureBlockCount() {
@@ -256,7 +258,7 @@ public final class BlueprintPanel {
         }
         boolean capture = nameDialogMode == NameDialogMode.CAPTURE_SAVE;
         BlueprintNameDialog.render(g, font, screenW, screenH, mouseX, mouseY, capture, nameDialogValue, nameDialogEntry,
-                CAPTURE.pointA(), CAPTURE.previewPointB(), nameDialogCaptureBlockCount);
+                CAPTURE.displayPointA(), CAPTURE.displayPointB(), nameDialogCaptureBlockCount);
     }
 
     public static boolean mouseClickedNameDialog(double mouseX, double mouseY, int button, int screenW, int screenH) {
@@ -596,6 +598,9 @@ public final class BlueprintPanel {
                             org.lwjgl.glfw.GLFW.GLFW_KEY_RIGHT_ALT) == org.lwjgl.glfw.GLFW.GLFW_PRESS
                     ? 4 : 1;
             if (cancelKey || keyCode == org.lwjgl.glfw.GLFW.GLFW_KEY_ESCAPE) {
+                if (CAPTURE.releaseActiveHandle()) {
+                    return true;
+                }
                 cancelCaptureMode();
                 return true;
             }
@@ -770,15 +775,15 @@ public final class BlueprintPanel {
     }
 
     static String capturePointAText() {
-        return shortPos(CAPTURE.pointA());
+        return shortPos(CAPTURE.displayPointA());
     }
 
     static String capturePointBText() {
-        return shortPos(CAPTURE.previewPointB());
+        return shortPos(CAPTURE.displayPointB());
     }
 
     static String captureSizeText() {
-        return BlueprintCaptureGeometry.captureSizeText(CAPTURE.pointA(), CAPTURE.previewPointB());
+        return CAPTURE.sizeText();
     }
 
     static int captureSizeX() {
@@ -805,8 +810,25 @@ public final class BlueprintPanel {
         CAPTURE.updateHoverPoint(pos);
     }
 
+    public static void updateCaptureHover(Vec3 origin, Vec3 direction, BlockPos pos) {
+        CAPTURE.updateHoverPoint(pos);
+        CAPTURE.updateHandleHover(origin, direction);
+    }
+
     public static BlockPos getCapturePreviewPointB() {
         return CAPTURE.previewPointB();
+    }
+
+    public static com.rtsbuilding.rtsbuilding.client.screen.culling.RtsCullingBox getCapturePreviewBoxForRender() {
+        return CAPTURE.previewBox();
+    }
+
+    public static Direction getCaptureHoveredHandleDirection() {
+        return CAPTURE.hoveredHandleDirection();
+    }
+
+    public static Direction getCaptureActiveHandleDirection() {
+        return CAPTURE.activeHandleDirection();
     }
 
     public static List<BlockPos> getCaptureIncludedBlocksForRender(int limit) {
@@ -825,6 +847,10 @@ public final class BlueprintPanel {
 
     public static boolean acceptCapturePoint(BlockPos pos) {
         return Config.areBlueprintsEnabled() && CAPTURE.acceptPoint(pos, BlueprintPanel::setStatus);
+    }
+
+    public static boolean handleCaptureWorldAction(BlockHitResult hit, Vec3 origin, Vec3 direction) {
+        return Config.areBlueprintsEnabled() && CAPTURE.handleWorldAction(hit, origin, direction, BlueprintPanel::setStatus);
     }
 
     public static boolean toggleCaptureBlockExclusion(BlockPos pos) {
@@ -857,7 +883,7 @@ public final class BlueprintPanel {
         CAPTURE.resizeSelection(dx, dy, dz, BlueprintPanel::setStatus);
     }
 
-    public static boolean mouseScrolledCaptureHeight(double scrollY) {
+    public static boolean mouseScrolledCaptureHeight(double scrollY, boolean fast) {
         if (!Config.areBlueprintsEnabled() || !CAPTURE.isActive()) {
             return false;
         }
@@ -865,7 +891,18 @@ public final class BlueprintPanel {
             setStatus(S2CBlueprintStatusPayload.INFO, "screen.rtsbuilding.blueprints.status.save_busy", "");
             return true;
         }
-        return false;
+        return CAPTURE.handleScroll(scrollY, fast, BlueprintPanel::setStatus);
+    }
+
+    public static boolean mouseDraggedCaptureHandle(double dragX, double dragY, double axisX, double axisY) {
+        if (!Config.areBlueprintsEnabled() || !CAPTURE.isActive()) {
+            return false;
+        }
+        if (CAPTURE.isSaving()) {
+            setStatus(S2CBlueprintStatusPayload.INFO, "screen.rtsbuilding.blueprints.status.save_busy", "");
+            return true;
+        }
+        return CAPTURE.handleDrag(dragX, dragY, axisX, axisY, BlueprintPanel::setStatus);
     }
 
     static void setCaptureSize(int x, int y, int z) {
@@ -899,7 +936,7 @@ public final class BlueprintPanel {
         String sizeLine = CAPTURE.pointA() == null
                 ? state
                 : text("screen.rtsbuilding.blueprints.capture_live_size",
-                        BlueprintCaptureGeometry.captureSizeText(CAPTURE.pointA(), CAPTURE.previewPointB()));
+                        CAPTURE.sizeText());
         g.drawString(font, trim(font, sizeLine + "  " + state, infoW - 112), infoX + 6, infoY + 20,
                 CAPTURE.pointA() != null && CAPTURE.pointB() != null ? 0xFF8EEA9B : 0xFFFFC06C, false);
         if (CAPTURE.pointB() == null && !CAPTURE.isSaving()) {
@@ -1742,16 +1779,20 @@ public final class BlueprintPanel {
             return;
         }
         if (!CAPTURE.isSelectionComplete()) {
-            setStatus(S2CBlueprintStatusPayload.ERROR, "screen.rtsbuilding.blueprints.status.capture_incomplete", "");
-            return;
+            if (!CAPTURE.confirmSingleBlockSelection(BlueprintPanel::setStatus)) {
+                setStatus(S2CBlueprintStatusPayload.ERROR, "screen.rtsbuilding.blueprints.status.capture_incomplete", "");
+                return;
+            }
         }
         openCaptureNameDialog();
     }
 
     static void saveCapturedAreaAs(String requestedName) {
         if (!isCaptureSelectionComplete()) {
-            setStatus(S2CBlueprintStatusPayload.ERROR, "screen.rtsbuilding.blueprints.status.capture_incomplete", "");
-            return;
+            if (!CAPTURE.confirmSingleBlockSelection(BlueprintPanel::setStatus)) {
+                setStatus(S2CBlueprintStatusPayload.ERROR, "screen.rtsbuilding.blueprints.status.capture_incomplete", "");
+                return;
+            }
         }
         String cleanName = sanitizeFileBase(stripBlueprintExtension(requestedName == null ? "" : requestedName));
         if (cleanName.isBlank()) {

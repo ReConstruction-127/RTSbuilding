@@ -56,6 +56,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -279,7 +280,12 @@ public final class BuilderScreen extends Screen {
     /** 切换覆盖层 Shift 导入。 */
     public void toggleOverlayShiftImportEnabled() { this.uiStateManager.toggleOverlayShiftImportEnabled(); }
     /** 切换存储就绪弹窗。 */
-    public void toggleShowStorageReadyPopup() { this.uiStateManager.toggleShowStorageReadyPopup(); }
+    public void toggleShowStorageReadyPopup() {
+        this.uiStateManager.toggleShowStorageReadyPopup();
+        if (!this.uiStateManager.isShowStorageReadyPopupEnabled()) {
+            this.controller.clearStorageScanPopupState();
+        }
+    }
     /** 切换工作流面板显示。 */
     public void toggleShowWorkflowPanelEnabled() { this.uiStateManager.toggleShowWorkflowPanelEnabled(); }
     /** 切换安静刷新。 */
@@ -324,11 +330,30 @@ public final class BuilderScreen extends Screen {
     }
     /** Returns whether the quick-build panel is currently open. */
     public boolean isQuickBuildOpen() {
-        return this.quickBuildPanel.isOpen();
+        return canUseQuickBuild() && this.quickBuildPanel.isOpen();
     }
     /** Opens or closes the quick-build panel. */
     public void setQuickBuildOpen(boolean open) {
+        if (open && !canUseQuickBuild()) {
+            showQuickBuildLockedMessage();
+            this.quickBuildPanel.setOpen(false);
+            return;
+        }
         this.quickBuildPanel.setOpen(open);
+    }
+
+    /** 返回快速建造是否已解锁。生存平衡关闭时保持旧行为。 */
+    public boolean canUseQuickBuild() {
+        return !this.controller.isProgressionEnabled()
+                || this.controller.hasInstalledPlugin(BuiltInRtsPluginCatalog.REMOTE_CONTROL_PLUGIN.toString());
+    }
+
+    /** 用 actionbar 提示，避免弹窗遮挡 RTS 视野和其他面板。 */
+    public void showQuickBuildLockedMessage() {
+        if (this.minecraft != null && this.minecraft.player != null) {
+            this.minecraft.player.displayClientMessage(
+                    Component.translatable("message.rtsbuilding.quick_build.remote_place_locked"), true);
+        }
     }
 
     /**
@@ -338,7 +363,7 @@ public final class BuilderScreen extends Screen {
      * 确保持久化值正确反映到活跃状态。
      */
     public void syncQuickBuildActiveState() {
-        if (!this.quickBuildPanel.isOpen()) {
+        if (!this.quickBuildPanel.isOpen() || !canUseQuickBuild()) {
             this.controller.setBuildShape(BuildShape.BLOCK);
             this.controller.clearAreaMineSession();
             this.shapeController.clearShapeBuildSession();
@@ -534,15 +559,10 @@ public final class BuilderScreen extends Screen {
             this.cameraInput.stopActiveMining();
             if (isWorldArea(mouseX, mouseY)) {
                 BlockHitResult hit = this.cursorPicker.pickBlockHit();
-                if (hit != null && hit.getType() == HitResult.Type.BLOCK) {
-                    if (!BlueprintPanel.isCaptureSelectionComplete()) {
-                        BlueprintPanel.acceptCapturePoint(hit.getBlockPos());
-                        return true;
-                    }
-                    if (BlueprintPanel.toggleCaptureBlockExclusion(hit.getBlockPos())) {
-                        return true;
-                    }
-                }
+                BlueprintPanel.handleCaptureWorldAction(
+                        hit,
+                        this.cursorPicker.currentRayOrigin(),
+                        this.cursorPicker.computeCursorRayDirection());
             }
             return true;
         }
@@ -767,6 +787,9 @@ public final class BuilderScreen extends Screen {
         if (handleFloatingWindowDrag(mouseX, mouseY, button, dragX, dragY)) {
             return true;
         }
+        if (handleBoxHandleDrag(button, dragX, dragY)) {
+            return true;
+        }
         if (this.cullingManager.isManagementMode() && button == GLFW.GLFW_MOUSE_BUTTON_LEFT) {
             return true;
         }
@@ -846,12 +869,12 @@ public final class BuilderScreen extends Screen {
         }
         if (this.bottomPanel.bottomPanelTab == BottomPanelLayoutTypes.BottomPanelTab.BLUEPRINTS && BlueprintPanel.isCaptureModeActive()) {
             if (mouseButton == GLFW.GLFW_MOUSE_BUTTON_LEFT
-                    && !BlueprintPanel.isCaptureSelectionComplete()
                     && isWorldArea(mouseX, mouseY)) {
                 BlockHitResult hit = this.cursorPicker.pickBlockHit();
-                if (hit != null && hit.getType() == HitResult.Type.BLOCK) {
-                    BlueprintPanel.acceptCapturePoint(hit.getBlockPos());
-                }
+                BlueprintPanel.handleCaptureWorldAction(
+                        hit,
+                        this.cursorPicker.currentRayOrigin(),
+                        this.cursorPicker.computeCursorRayDirection());
             }
             return true;
         }
@@ -1078,7 +1101,7 @@ public final class BuilderScreen extends Screen {
         if (handleFloatingWindowScroll(mouseX, mouseY, scrollX, scrollY)) {
             return true;
         }
-        if (BlueprintPanel.mouseScrolledCaptureHeight(scrollY)) {
+        if (BlueprintPanel.mouseScrolledCaptureHeight(scrollY, isAltDown())) {
             return true;
         }
         if (this.cullingManager.isManagementMode()
@@ -1483,7 +1506,10 @@ public final class BuilderScreen extends Screen {
         this.funnelBufferPanel.render(guiGraphics, mouseX, mouseY);
         if (this.bottomPanel.bottomPanelTab == BottomPanelLayoutTypes.BottomPanelTab.BLUEPRINTS && BlueprintPanel.isCaptureModeActive()) {
             BlockHitResult hit = isWorldArea(mouseX, mouseY) ? this.cursorPicker.pickBlockHit() : null;
-            BlueprintPanel.updateCaptureHoverPoint(hit == null ? null : hit.getBlockPos());
+            BlueprintPanel.updateCaptureHover(
+                    isWorldArea(mouseX, mouseY) ? this.cursorPicker.currentRayOrigin() : null,
+                    isWorldArea(mouseX, mouseY) ? this.cursorPicker.computeCursorRayDirection() : null,
+                    hit == null ? null : hit.getBlockPos());
         }
         this.blueprintWindowPanel.syncWithBlueprintState();
         this.blueprintMaterialWindowPanel.syncWithBlueprintState();
@@ -1744,11 +1770,11 @@ public final class BuilderScreen extends Screen {
 
     /** Returns true when quick-build is showing the range-destroy workflow. */
     public boolean isQuickBuildRangeDestroyMode() {
-        return this.quickBuildPanel.isOpen() && this.quickBuildPanel.isRangeDestroyMode();
+        return isQuickBuildOpen() && this.quickBuildPanel.isRangeDestroyMode();
     }
     /** Returns true when Quick Build range-destroy is using the connected-chain shape. */
     public boolean isQuickBuildRangeDestroyChainMode() {
-        return this.quickBuildPanel.isOpen() && this.quickBuildPanel.isRangeDestroyChainMode();
+        return isQuickBuildOpen() && this.quickBuildPanel.isRangeDestroyChainMode();
     }
     /** Player-facing shape label for the top status row. */
     public String activeQuickBuildShapeLabel() {
@@ -1810,6 +1836,11 @@ public final class BuilderScreen extends Screen {
     }
     /** Toggles the quick-build panel open/closed. */
     public void toggleQuickBuild() {
+        if (!canUseQuickBuild()) {
+            showQuickBuildLockedMessage();
+            this.quickBuildPanel.setOpen(false);
+            return;
+        }
         this.quickBuildPanel.toggleOpen();
     }
 
@@ -1953,6 +1984,47 @@ public final class BuilderScreen extends Screen {
             return false;
         }
         return RtsCullingWorldInput.handleWorldAction(this.cullingManager, this.cursorPicker);
+    }
+
+    private boolean handleBoxHandleDrag(int button, double dragX, double dragY) {
+        if (button != GLFW.GLFW_MOUSE_BUTTON_LEFT) {
+            return false;
+        }
+        Direction blueprintDirection = BlueprintPanel.getCaptureActiveHandleDirection();
+        if (BlueprintPanel.isCaptureModeActive() && blueprintDirection != null) {
+            double[] axis = screenAxisForDirection(blueprintDirection);
+            return BlueprintPanel.mouseDraggedCaptureHandle(dragX, dragY, axis[0], axis[1]);
+        }
+        Direction cullingDirection = this.cullingManager.activeHandleDirection();
+        if (this.cullingManager.isManagementMode() && cullingDirection != null) {
+            double[] axis = screenAxisForDirection(cullingDirection);
+            return this.cullingManager.handleActiveHandleDrag(dragX, dragY, axis[0], axis[1]);
+        }
+        return false;
+    }
+
+    /**
+     * 把世界里的六向箭头投影成屏幕拖拽轴；沿箭头视觉方向拖动为扩大，反向为缩小。
+     */
+    private double[] screenAxisForDirection(Direction direction) {
+        if (direction == null || this.minecraft == null || this.minecraft.gameRenderer == null) {
+            return new double[] {0.0D, -1.0D};
+        }
+        float yawDeg = this.minecraft.gameRenderer.getMainCamera().getYRot();
+        float pitchDeg = this.minecraft.gameRenderer.getMainCamera().getXRot();
+        double yaw = Math.toRadians(yawDeg);
+        double pitch = Math.toRadians(pitchDeg);
+        Vec3 forward = new Vec3(
+                -Math.sin(yaw) * Math.cos(pitch),
+                -Math.sin(pitch),
+                Math.cos(yaw) * Math.cos(pitch)).normalize();
+        Vec3 right = new Vec3(Math.cos(yaw), 0.0D, Math.sin(yaw)).normalize();
+        Vec3 up = forward.cross(right).normalize();
+        Vec3 normal = new Vec3(
+                direction.getNormal().getX(),
+                direction.getNormal().getY(),
+                direction.getNormal().getZ());
+        return new double[] {-normal.dot(right), -normal.dot(up)};
     }
 
     private void updateRangeCullingHover(double mouseX, double mouseY) {

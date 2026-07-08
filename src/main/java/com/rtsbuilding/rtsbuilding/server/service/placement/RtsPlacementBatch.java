@@ -13,6 +13,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.state.BlockState;
@@ -68,8 +69,11 @@ public final class RtsPlacementBatch {
             double rayOriginX, double rayOriginY, double rayOriginZ, double rayDirX, double rayDirY,
             double rayDirZ, boolean quickBuild, boolean forceEmptyHand, boolean sendRemoteHint,
             int workflowEntryId) {
-        if (!RtsProgressionManager.canUse(
-                player, RtsFeature.REMOTE_PLACE)) {
+        if (!RtsProgressionManager.canUse(player, RtsFeature.REMOTE_PLACE)) {
+            if (sendRemoteHint && player != null) {
+                player.displayClientMessage(
+                        Component.translatable("message.rtsbuilding.quick_build.remote_place_locked"), true);
+            }
             return false;
         }
         if (session == null || clickedPositions == null || clickedPositions.isEmpty() || face == null) {

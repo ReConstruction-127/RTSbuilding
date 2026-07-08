@@ -46,9 +46,9 @@ public final class QuickBuildPanel extends RtsWindowPanel {
 
     // ======================== 面板尺寸 ========================
     private static final int QUICK_BUILD_PANEL_W = 178;
-    private static final int QUICK_BUILD_PANEL_H = 184;
+    private static final int QUICK_BUILD_PANEL_H = 222;
     private static final int QUICK_BUILD_DESTROY_PANEL_H = QUICK_BUILD_PANEL_H + SHAPE_ROW_PITCH;
-    private static final int QUICK_BUILD_PANEL_MIN_H = 184;
+    private static final int QUICK_BUILD_PANEL_MIN_H = 222;
 
     /** 底部提示文字区域额外高度 */
     private static final int BOTTOM_INFO_H = 52;
@@ -75,6 +75,8 @@ public final class QuickBuildPanel extends RtsWindowPanel {
             BuildShape.SQUARE,
             BuildShape.WALL,
             BuildShape.CIRCLE,
+            BuildShape.CYLINDER,
+            BuildShape.BALL,
             BuildShape.BOX
     };
 
@@ -85,6 +87,8 @@ public final class QuickBuildPanel extends RtsWindowPanel {
             AreaMineShape.SQUARE,
             AreaMineShape.WALL,
             AreaMineShape.CIRCLE,
+            AreaMineShape.CYLINDER,
+            AreaMineShape.BALL,
             AreaMineShape.BOX
     };
 
@@ -95,6 +99,8 @@ public final class QuickBuildPanel extends RtsWindowPanel {
             "screen.rtsbuilding.tooltip.shape_square",
             "screen.rtsbuilding.tooltip.shape_wall",
             "screen.rtsbuilding.tooltip.shape_circle",
+            "screen.rtsbuilding.tooltip.shape_cylinder",
+            "screen.rtsbuilding.tooltip.shape_ball",
             "screen.rtsbuilding.tooltip.shape_box"
     };
 
@@ -105,6 +111,8 @@ public final class QuickBuildPanel extends RtsWindowPanel {
             "screen.rtsbuilding.tooltip.shape_square",
             "screen.rtsbuilding.tooltip.shape_wall",
             "screen.rtsbuilding.tooltip.shape_circle",
+            "screen.rtsbuilding.tooltip.shape_cylinder",
+            "screen.rtsbuilding.tooltip.shape_ball",
             "screen.rtsbuilding.tooltip.shape_box"
     };
 
@@ -115,6 +123,8 @@ public final class QuickBuildPanel extends RtsWindowPanel {
             QUICK_BUILD_SQUARE_BLOCK,
             QUICK_BUILD_WALL_BLOCK,
             QUICK_BUILD_CIRCLE_BLOCK,
+            QUICK_BUILD_CYLINDER_BLOCK,
+            QUICK_BUILD_BALL_BLOCK,
             QUICK_BUILD_BOX_BLOCK
     };
 
@@ -125,6 +135,8 @@ public final class QuickBuildPanel extends RtsWindowPanel {
             QUICK_BUILD_SQUARE_BLOCK,
             QUICK_BUILD_WALL_BLOCK,
             QUICK_BUILD_CIRCLE_BLOCK,
+            QUICK_BUILD_CYLINDER_BLOCK,
+            QUICK_BUILD_BALL_BLOCK,
             QUICK_BUILD_BOX_BLOCK
     };
 
@@ -765,7 +777,7 @@ public final class QuickBuildPanel extends RtsWindowPanel {
 
     @Override
     protected boolean canShowWindow() {
-        return super.canShowWindow();
+        return super.canShowWindow() && screen != null && screen.canUseQuickBuild();
     }
 
     // ======================== 抽象方法实现 & API ========================
@@ -828,6 +840,8 @@ public final class QuickBuildPanel extends RtsWindowPanel {
             case SQUARE -> AreaMineShape.SQUARE;
             case WALL -> AreaMineShape.WALL;
             case CIRCLE -> AreaMineShape.CIRCLE;
+            case CYLINDER -> AreaMineShape.CYLINDER;
+            case BALL -> AreaMineShape.BALL;
             case BOX -> AreaMineShape.BOX;
             case BLOCK -> AreaMineShape.BLOCK;
         };
@@ -839,6 +853,8 @@ public final class QuickBuildPanel extends RtsWindowPanel {
             case SQUARE -> BuildShape.SQUARE;
             case WALL -> BuildShape.WALL;
             case CIRCLE -> BuildShape.CIRCLE;
+            case CYLINDER -> BuildShape.CYLINDER;
+            case BALL -> BuildShape.BALL;
             case BOX -> BuildShape.BOX;
             case BLOCK, CHAIN -> BuildShape.BLOCK;
         };

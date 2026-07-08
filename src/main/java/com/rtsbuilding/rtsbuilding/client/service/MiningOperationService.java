@@ -3,6 +3,7 @@ package com.rtsbuilding.rtsbuilding.client.service;
 import com.rtsbuilding.rtsbuilding.client.network.RtsClientPacketGateway;
 import com.rtsbuilding.rtsbuilding.client.record.AreaMineBounds;
 import com.rtsbuilding.rtsbuilding.client.screen.ultimine.AreaMineShape;
+import com.rtsbuilding.rtsbuilding.common.shape.model.AreaShape;
 import com.rtsbuilding.rtsbuilding.common.shape.model.ShapeFillMode;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
@@ -306,7 +307,7 @@ public final class MiningOperationService {
                 this.activeMineToolSlot,
                 selectedMiningToolItemId(selectedItemId, selectedItemPreview),
                 selectedMiningToolPrototype(selectedItemId, selectedItemPreview),
-                (byte) this.areaMineShape.ordinal(),
+                areaShapeOrdinal(this.areaMineShape),
                 (byte) (fillMode == null ? ShapeFillMode.FILL : fillMode).ordinal(),
                 toolProtectionEnabled);
 
@@ -357,6 +358,20 @@ public final class MiningOperationService {
         ItemStack prototype = selectedItemPreview.copy();
         prototype.setCount(1);
         return prototype;
+    }
+
+    private static byte areaShapeOrdinal(AreaMineShape shape) {
+        AreaShape areaShape = switch (shape == null ? AreaMineShape.BLOCK : shape) {
+            case LINE -> AreaShape.LINE;
+            case SQUARE -> AreaShape.SQUARE;
+            case WALL -> AreaShape.WALL;
+            case CIRCLE -> AreaShape.CIRCLE;
+            case BOX -> AreaShape.BOX;
+            case CYLINDER -> AreaShape.CYLINDER;
+            case BALL -> AreaShape.BALL;
+            case BLOCK, CHAIN -> AreaShape.BLOCK;
+        };
+        return (byte) areaShape.ordinal();
     }
 
     // =========================================================================

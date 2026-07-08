@@ -29,18 +29,16 @@ class BlueprintBlockEntitySanitizerTest {
 
         assertEquals("minecraft:chest", sanitized.getString("id"));
         assertEquals("{\"text\":\"Builder Cache\"}", sanitized.getString("CustomName"));
-        assertFalse(sanitized.contains("Items"), "生存蓝图放置不能复制容器里的物品。");
-        assertFalse(sanitized.contains("ForgeCaps"), "能力库存可能持有物品、流体或能量，也不能复制。");
-        assertFalse(sanitized.contains("Tank"), "流体内容不能随蓝图免费复制。");
-
-        assertTrue(source.contains("Items"), "净化器必须复制后处理，不能修改蓝图原始 NBT。");
+        assertFalse(sanitized.contains("Items"), "Survival blueprints must not copy container items.");
+        assertFalse(sanitized.contains("ForgeCaps"), "Capability payloads can contain free resources.");
+        assertFalse(sanitized.contains("Tank"), "Fluid contents must not be copied from blueprint NBT.");
+        assertTrue(source.contains("Items"), "The sanitizer must not mutate original blueprint NBT.");
     }
 
     @Test
-    void nestedItemStackCompoundsAreRemovedWithoutDroppingTextData() {
+    void nestedItemStackCompoundsAreRemovedWithoutDroppingNeutralData() {
         CompoundTag source = new CompoundTag();
-        source.putString("id", "minecraft:sign");
-        source.putString("front_text", "玩家写好的说明");
+        source.putString("id", "minecraft:decorated_pot");
 
         CompoundTag nested = new CompoundTag();
         nested.putString("owner_note", "keep me");
@@ -50,9 +48,31 @@ class BlueprintBlockEntitySanitizerTest {
         CompoundTag sanitized = BlueprintBlockEntitySanitizer.sanitizeForSurvivalPlacement(source);
         CompoundTag display = sanitized.getCompound("display");
 
-        assertEquals("玩家写好的说明", sanitized.getString("front_text"));
         assertEquals("keep me", display.getString("owner_note"));
-        assertFalse(display.contains("preview_stack"), "嵌套物品栈也不能通过蓝图复制。");
+        assertFalse(display.contains("preview_stack"), "Nested item stacks must not survive sanitizing.");
+    }
+
+    @Test
+    void survivalPlacementDropsDangerousExecutableAndGeneratedContent() {
+        CompoundTag source = new CompoundTag();
+        source.putString("id", "minecraft:command_block");
+        source.putString("Command", "give @a minecraft:diamond 64");
+        source.put("SpawnData", new CompoundTag());
+        source.putInt("Primary", 5);
+        source.putString("LootTable", "minecraft:chests/end_city_treasure");
+        source.putString("front_text", "{\"messages\":[\"malicious\"]}");
+        source.putString("Text1", "{\"text\":\"legacy sign\"}");
+
+        CompoundTag sanitized = BlueprintBlockEntitySanitizer.sanitizeForSurvivalPlacement(source);
+
+        assertEquals("minecraft:command_block", sanitized.getString("id"));
+        assertFalse(sanitized.contains("Command"), "Command blocks must not import executable commands.");
+        assertFalse(sanitized.contains("SpawnData"), "Spawner payloads must not import entity spawn data.");
+        assertFalse(sanitized.contains("Primary"), "Beacon effects must not be imported for free.");
+        assertFalse(sanitized.contains("LootTable"), "Loot tables must not be imported from blueprint NBT.");
+        assertFalse(sanitized.contains("front_text"), "Modern sign text is user-authored content.");
+        assertFalse(sanitized.contains("Text1"), "Legacy sign text is user-authored content.");
+        assertTrue(source.contains("Command"), "The original blueprint tag is kept intact.");
     }
 
     private static ListTag itemList(String itemId, int count) {

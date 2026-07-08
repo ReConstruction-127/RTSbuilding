@@ -70,4 +70,38 @@ class AreaShapeGeneratorTest {
         assertEquals(26, new HashSet<>(hollow).size());
         assertFalse(hollow.contains(new BlockPos(1, 65, 1)));
     }
+
+    @Test
+    void cylinderUsesCircleFootprintAndHeightOffset() {
+        AreaShapeGenerator generator = ShapeGeneratorRegistry.getGenerator(AreaShape.CYLINDER);
+        BlockPos start = new BlockPos(0, 64, 0);
+        AreaShapeInput input = AreaShapeInput.of(start, new BlockPos(2, 64, 0), 2, Direction.UP, Direction.UP);
+
+        List<BlockPos> fill = generator.generatePositions(input, ShapeFillMode.FILL);
+        List<BlockPos> hollow = generator.generatePositions(input, ShapeFillMode.HOLLOW);
+
+        assertEquals(39, new HashSet<>(fill).size());
+        assertTrue(fill.contains(new BlockPos(0, 65, 0)));
+        assertEquals(38, new HashSet<>(hollow).size());
+        assertFalse(hollow.contains(new BlockPos(0, 65, 0)));
+        assertTrue(hollow.contains(new BlockPos(0, 64, 0)));
+        assertTrue(hollow.contains(new BlockPos(0, 66, 0)));
+    }
+
+    @Test
+    void ballRadiusCreatesThreeDimensionalVolume() {
+        AreaShapeGenerator generator = ShapeGeneratorRegistry.getGenerator(AreaShape.BALL);
+        BlockPos start = new BlockPos(0, 64, 0);
+        AreaShapeInput input = AreaShapeInput.of(start, new BlockPos(1, 64, 0), 0, Direction.UP, Direction.UP);
+
+        List<BlockPos> fill = generator.generatePositions(input, ShapeFillMode.FILL);
+
+        assertEquals(7, new HashSet<>(fill).size());
+        assertTrue(fill.contains(start.above()));
+        assertTrue(fill.contains(start.below()));
+        assertTrue(fill.contains(start.east()));
+        assertTrue(fill.contains(start.west()));
+        assertTrue(fill.contains(start.north()));
+        assertTrue(fill.contains(start.south()));
+    }
 }

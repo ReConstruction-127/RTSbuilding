@@ -46,7 +46,7 @@ public final class BlueprintBlockEntitySanitizer {
         CompoundTag out = new CompoundTag();
         for (String key : source.getAllKeys()) {
             Tag value = source.get(key);
-            if (value == null || shouldDropContentKey(key)) {
+            if (value == null || shouldDropBlueprintKey(key)) {
                 continue;
             }
             Tag sanitized = sanitizeTag(key, value);
@@ -78,7 +78,7 @@ public final class BlueprintBlockEntitySanitizer {
         return out;
     }
 
-    private static boolean shouldDropContentKey(String key) {
+    private static boolean shouldDropBlueprintKey(String key) {
         String normalized = key == null ? "" : key.toLowerCase(Locale.ROOT);
         return normalized.equals("items")
                 || normalized.equals("inventory")
@@ -95,7 +95,40 @@ public final class BlueprintBlockEntitySanitizer {
                 || normalized.equals("capabilities")
                 || normalized.equals("energy")
                 || normalized.equals("energystorage")
-                || normalized.equals("storedenergy");
+                || normalized.equals("storedenergy")
+                || normalized.equals("command")
+                || normalized.equals("lastoutput")
+                || normalized.equals("successcount")
+                || normalized.equals("trackoutput")
+                || normalized.equals("auto")
+                || normalized.equals("powered")
+                || normalized.equals("conditionmet")
+                || normalized.equals("updatelastexecution")
+                || normalized.equals("spawndata")
+                || normalized.equals("spawnpotentials")
+                || normalized.equals("minspawndelay")
+                || normalized.equals("maxspawndelay")
+                || normalized.equals("spawncount")
+                || normalized.equals("maxnearbyentities")
+                || normalized.equals("requiredplayerrange")
+                || normalized.equals("spawnrange")
+                || normalized.equals("delay")
+                || normalized.equals("primary")
+                || normalized.equals("secondary")
+                || normalized.equals("levels")
+                || normalized.equals("loottable")
+                || normalized.equals("loottableseed")
+                || normalized.equals("lock")
+                || normalized.equals("front_text")
+                || normalized.equals("back_text")
+                || normalized.equals("text1")
+                || normalized.equals("text2")
+                || normalized.equals("text3")
+                || normalized.equals("text4")
+                || normalized.equals("filteredtext1")
+                || normalized.equals("filteredtext2")
+                || normalized.equals("filteredtext3")
+                || normalized.equals("filteredtext4");
     }
 
     private static boolean looksLikeItemStack(CompoundTag tag) {

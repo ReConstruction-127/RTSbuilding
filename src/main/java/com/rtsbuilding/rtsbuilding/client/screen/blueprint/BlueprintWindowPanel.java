@@ -127,10 +127,9 @@ public final class BlueprintWindowPanel extends RtsWindowPanel {
                 x, y + 14, complete ? 0xFF8EEA9B : 0xFFFFC06C, w);
         drawLabel(g, Component.translatable("screen.rtsbuilding.blueprints.capture_window_scroll_hint"),
                 x, y + 26, 0xFF9FB3C8, w);
-        drawPointSummary(g, x, y + 42, w, complete);
-
         if (complete) {
-            renderCaptureXYZControls(g, mouseX, mouseY, partialTick, x, y + 54, w, !saving);
+            drawLabel(g, Component.translatable("screen.rtsbuilding.blueprints.capture_size",
+                    BlueprintPanel.captureSizeText()), x, y + 42, 0xFFB7CDE2, w);
         }
 
         Component status = saving
@@ -214,18 +213,6 @@ public final class BlueprintWindowPanel extends RtsWindowPanel {
         int sizeX = sizeBoxX + Math.max(0, (sizeW - this.screen.font().width(size)) / 2);
         g.drawString(this.screen.font(), size, sizeX, y + 32, 0xFF9FB3C8, false);
         renderButtonAt(g, this.detailsButton, detailsX, y + 27, DETAILS_BUTTON_W, true, mouseX, mouseY, partialTick);
-    }
-
-    private void drawPointSummary(GuiGraphics g, int x, int y, int w, boolean complete) {
-        String a = Component.translatable("screen.rtsbuilding.blueprints.capture_point_a",
-                BlueprintPanel.capturePointAText()).getString();
-        String b = Component.translatable("screen.rtsbuilding.blueprints.capture_point_b",
-                BlueprintPanel.capturePointBText()).getString();
-        int half = Math.max(60, (w - GAP) / 2);
-        g.drawString(this.screen.font(), RtsClientUiUtil.trimToWidth(this.screen.font(), a, half),
-                x, y, 0xFFB7CDE2, false);
-        g.drawString(this.screen.font(), RtsClientUiUtil.trimToWidth(this.screen.font(), b, half),
-                x + half + GAP, y, 0xFFB7CDE2, false);
     }
 
     private void renderCaptureXYZControls(GuiGraphics g, int mouseX, int mouseY, float partialTick,
@@ -450,20 +437,8 @@ public final class BlueprintWindowPanel extends RtsWindowPanel {
     }
 
     private void handleCaptureClick(double mouseX, double mouseY, int button) {
-        if (BlueprintPanel.isCaptureSelectionComplete()
-                && (clickTextBox(this.sizeXInput, mouseX, mouseY, button)
-                || clickTextBox(this.sizeYInput, mouseX, mouseY, button)
-                || clickTextBox(this.sizeZInput, mouseX, mouseY, button))) {
-            return;
-        }
         clearFocus();
         clickButtons(mouseX, mouseY, button, this.saveCaptureButton, this.cancelButton);
-        if (BlueprintPanel.isCaptureSelectionComplete()) {
-            clickButtons(mouseX, mouseY, button,
-                    this.sizePlusButtons[0], this.sizeMinusButtons[0],
-                    this.sizePlusButtons[1], this.sizeMinusButtons[1],
-                    this.sizePlusButtons[2], this.sizeMinusButtons[2]);
-        }
     }
 
     private void handlePlacementClick(double mouseX, double mouseY, int button) {
@@ -532,29 +507,7 @@ public final class BlueprintWindowPanel extends RtsWindowPanel {
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
         if (BlueprintPanel.isCaptureModeActive()) {
-            if (!isOpen() || !isInsideWindow(mouseX, mouseY)) {
-                return false;
-            }
-            if (!BlueprintPanel.isCaptureSelectionComplete()) {
-                return true;
-            }
-            int step = scrollY > 0.0D ? 1 : -1;
-            if (isMouseOver(this.sizeXInput, mouseX, mouseY)) {
-                BlueprintPanel.adjustCaptureSize(step, 0, 0);
-                syncCaptureSizeInputs(true);
-                return true;
-            }
-            if (isMouseOver(this.sizeYInput, mouseX, mouseY)) {
-                BlueprintPanel.adjustCaptureSize(0, step, 0);
-                syncCaptureSizeInputs(true);
-                return true;
-            }
-            if (isMouseOver(this.sizeZInput, mouseX, mouseY)) {
-                BlueprintPanel.adjustCaptureSize(0, 0, step);
-                syncCaptureSizeInputs(true);
-                return true;
-            }
-            return true;
+            return isOpen() && isInsideWindow(mouseX, mouseY);
         }
         return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
     }

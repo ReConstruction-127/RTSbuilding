@@ -1,12 +1,18 @@
 package com.rtsbuilding.rtsbuilding.client.screen.blueprint;
 
+import com.rtsbuilding.rtsbuilding.client.screen.culling.RtsCullingBox;
+import com.rtsbuilding.rtsbuilding.client.screen.culling.RtsBoxHandleInteraction;
 import com.rtsbuilding.rtsbuilding.common.blueprint.io.BlueprintWriters;
 import com.rtsbuilding.rtsbuilding.common.blueprint.model.RtsBlueprint;
 import com.rtsbuilding.rtsbuilding.network.blueprint.S2CBlueprintStatusPayload;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.HitResult;
+import net.minecraft.world.phys.Vec3;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -21,7 +27,9 @@ import static com.rtsbuilding.rtsbuilding.client.screen.blueprint.BlueprintPanel
  * Owns the mutable state for selecting and saving a blueprint capture region.
  */
 final class BlueprintCaptureController {
+    private final RtsBoxHandleInteraction handleInteraction = new RtsBoxHandleInteraction();
     private boolean active = false;
+    private BlockPos firstWorldCorner = null;
     private BlockPos pointA = null;
     private BlockPos pointB = null;
     private BlockPos hoverPoint = null;
@@ -48,15 +56,70 @@ final class BlueprintCaptureController {
         return pointB;
     }
 
+    BlockPos displayPointA() {
+        RtsCullingBox box = previewBox();
+        if (box != null) {
+            return box.min();
+        }
+        return firstWorldCorner;
+    }
+
+    BlockPos displayPointB() {
+        RtsCullingBox box = previewBox();
+        return box == null ? null : box.max();
+    }
+
+    Direction hoveredHandleDirection() {
+        return handleInteraction.hoveredDirection();
+    }
+
+    Direction activeHandleDirection() {
+        return handleInteraction.activeDirection();
+    }
+
+    RtsCullingBox selectionBox() {
+        if (pointA == null || pointB == null) {
+            return null;
+        }
+        int minX = Math.min(pointA.getX(), pointB.getX());
+        int minY = Math.min(pointA.getY(), pointB.getY()) + 1;
+        int minZ = Math.min(pointA.getZ(), pointB.getZ());
+        int maxX = Math.max(pointA.getX(), pointB.getX());
+        int maxY = Math.max(pointA.getY(), pointB.getY());
+        int maxZ = Math.max(pointA.getZ(), pointB.getZ());
+        if (minY > maxY) {
+            return null;
+        }
+        return new RtsCullingBox(1, new BlockPos(minX, minY, minZ), new BlockPos(maxX, maxY, maxZ));
+    }
+
+    RtsCullingBox previewBox() {
+        RtsCullingBox complete = selectionBox();
+        if (complete != null) {
+            return complete;
+        }
+        if (firstWorldCorner == null) {
+            return null;
+        }
+        BlockPos second = hoverPoint == null ? firstWorldCorner : hoverPoint;
+        return new RtsCullingBox(1, firstWorldCorner, second);
+    }
+
     void updateHoverPoint(BlockPos pos) {
         hoverPoint = pos == null ? null : pos.immutable();
     }
 
+    void updateHandleHover(Vec3 origin, Vec3 direction) {
+        handleInteraction.updateHover(selectionBox(), origin, direction, active);
+    }
+
     BlockPos previewPointB() {
-        if (pointB != null) {
-            return pointB;
-        }
-        return hoverPoint != null ? hoverPoint : pointA;
+        BlockPos display = displayPointB();
+        return display != null ? display : hoverPoint;
+    }
+
+    String sizeText() {
+        return boxSizeText(previewBox());
     }
 
     boolean shouldRenderPreviewFill() {
@@ -135,10 +198,7 @@ final class BlueprintCaptureController {
 
     void start(StatusSink status) {
         active = true;
-        pointA = null;
-        pointB = null;
-        hoverPoint = null;
-        excludedBlocks.clear();
+        resetSelection();
         status.set(S2CBlueprintStatusPayload.INFO, "screen.rtsbuilding.blueprints.status.capture_start", "");
     }
 
@@ -158,6 +218,72 @@ final class BlueprintCaptureController {
         active = false;
     }
 
+    boolean releaseActiveHandle() {
+        return handleInteraction.releaseActiveHandle();
+    }
+
+    boolean handleWorldAction(BlockHitResult hit, Vec3 origin, Vec3 direction, StatusSink status) {
+        if (!active) {
+            return false;
+        }
+        if (saveJob != null) {
+            status.set(S2CBlueprintStatusPayload.INFO, "screen.rtsbuilding.blueprints.status.save_busy", "");
+            return true;
+        }
+        RtsBoxHandleInteraction.ClickResult handleClick = handleInteraction.clickHandle(selectionBox(), origin, direction);
+        if (handleClick.handled()) {
+            if (handleClick.kind() == RtsBoxHandleInteraction.ClickKind.RELEASED) {
+                status.set(S2CBlueprintStatusPayload.INFO,
+                        "screen.rtsbuilding.blueprints.status.capture_handle_released", "");
+                return true;
+            }
+            status.set(S2CBlueprintStatusPayload.INFO,
+                    "screen.rtsbuilding.blueprints.status.capture_handle_selected",
+                    handleClick.direction().getName());
+            return true;
+        }
+        if (hit == null || hit.getType() != HitResult.Type.BLOCK) {
+            return true;
+        }
+        if (pointB == null) {
+            return acceptPoint(hit.getBlockPos(), status);
+        }
+        if (toggleBlockExclusion(hit.getBlockPos(), status)) {
+            return true;
+        }
+        status.set(S2CBlueprintStatusPayload.INFO, "screen.rtsbuilding.blueprints.status.capture_adjust_hint",
+                sizeText());
+        return true;
+    }
+
+    boolean handleScroll(double scrollY, boolean fast, StatusSink status) {
+        if (!active) {
+            return false;
+        }
+        if (saveJob != null) {
+            status.set(S2CBlueprintStatusPayload.INFO, "screen.rtsbuilding.blueprints.status.save_busy", "");
+            return true;
+        }
+        return handleInteraction.handleScroll(scrollY, fast, (direction, delta) -> {
+            adjustSelectionFromHandle(direction, delta, status);
+            return true;
+        });
+    }
+
+    boolean handleDrag(double dragX, double dragY, double axisX, double axisY, StatusSink status) {
+        if (!active) {
+            return false;
+        }
+        if (saveJob != null) {
+            status.set(S2CBlueprintStatusPayload.INFO, "screen.rtsbuilding.blueprints.status.save_busy", "");
+            return true;
+        }
+        return handleInteraction.handleDrag(dragX, dragY, axisX, axisY, (direction, delta) -> {
+            adjustSelectionFromHandle(direction, delta, status);
+            return true;
+        });
+    }
+
     boolean acceptPoint(BlockPos pos, StatusSink status) {
         if (!active || pos == null) {
             return false;
@@ -168,22 +294,31 @@ final class BlueprintCaptureController {
         }
         if (pointB != null) {
             status.set(S2CBlueprintStatusPayload.INFO, "screen.rtsbuilding.blueprints.status.capture_adjust_hint",
-                    captureSizeText(pointA, pointB));
+                    sizeText());
             return false;
         }
-        if (pointA == null) {
-            pointA = pos.immutable();
+        if (firstWorldCorner == null) {
+            firstWorldCorner = pos.immutable();
+            pointA = pos.below().immutable();
             pointB = null;
             hoverPoint = pos.immutable();
             excludedBlocks.clear();
-            status.set(S2CBlueprintStatusPayload.INFO, "screen.rtsbuilding.blueprints.status.capture_a", shortPos(pointA));
+            status.set(S2CBlueprintStatusPayload.INFO, "screen.rtsbuilding.blueprints.status.capture_a", "");
         } else {
-            pointB = pos.immutable();
-            hoverPoint = pointB;
+            applySelectionBox(new RtsCullingBox(1, firstWorldCorner, pos.immutable()));
             excludedBlocks.clear();
             status.set(S2CBlueprintStatusPayload.SUCCESS, "screen.rtsbuilding.blueprints.status.capture_b",
-                    captureSizeText(pointA, pointB));
+                    sizeText());
         }
+        return true;
+    }
+
+    boolean confirmSingleBlockSelection(StatusSink status) {
+        if (!active || pointB != null || firstWorldCorner == null) {
+            return false;
+        }
+        applySelectionBox(new RtsCullingBox(1, firstWorldCorner, firstWorldCorner));
+        status.set(S2CBlueprintStatusPayload.SUCCESS, "screen.rtsbuilding.blueprints.status.capture_b", sizeText());
         return true;
     }
 
@@ -223,6 +358,9 @@ final class BlueprintCaptureController {
             status.set(S2CBlueprintStatusPayload.ERROR, "screen.rtsbuilding.blueprints.status.capture_incomplete", "");
             return;
         }
+        if (firstWorldCorner != null) {
+            firstWorldCorner = firstWorldCorner.offset(deltaX, deltaY, deltaZ);
+        }
         pointA = pointA.offset(deltaX, deltaY, deltaZ);
         if (pointB != null) {
             pointB = pointB.offset(deltaX, deltaY, deltaZ);
@@ -238,30 +376,11 @@ final class BlueprintCaptureController {
             excludedBlocks.clear();
             excludedBlocks.addAll(moved);
         }
-        status.set(S2CBlueprintStatusPayload.INFO, "screen.rtsbuilding.blueprints.status.capture_moved",
-                captureSizeText(pointA, pointB));
+        status.set(S2CBlueprintStatusPayload.INFO, "screen.rtsbuilding.blueprints.status.capture_moved", sizeText());
     }
 
     void expandVertical(int deltaY, StatusSink status) {
-        if (saveJob != null) {
-            status.set(S2CBlueprintStatusPayload.INFO, "screen.rtsbuilding.blueprints.status.save_busy", "");
-            return;
-        }
-        if (pointA == null || pointB == null || deltaY == 0) {
-            status.set(S2CBlueprintStatusPayload.ERROR, "screen.rtsbuilding.blueprints.status.capture_incomplete", "");
-            return;
-        }
-        int minX = Math.min(pointA.getX(), pointB.getX());
-        int minY = Math.min(pointA.getY(), pointB.getY());
-        int minZ = Math.min(pointA.getZ(), pointB.getZ());
-        int maxX = Math.max(pointA.getX(), pointB.getX());
-        int maxY = Math.max(pointA.getY(), pointB.getY());
-        int maxZ = Math.max(pointA.getZ(), pointB.getZ());
-        maxY = Math.max(minY, maxY + deltaY);
-        pointA = new BlockPos(minX, minY, minZ);
-        pointB = new BlockPos(maxX, maxY, maxZ);
-        status.set(S2CBlueprintStatusPayload.INFO, "screen.rtsbuilding.blueprints.status.capture_resized",
-                captureSizeText(pointA, pointB));
+        adjustSelectionFromHandle(Direction.UP, deltaY, status);
     }
 
     void resizeSelection(int deltaX, int deltaY, int deltaZ, StatusSink status) {
@@ -270,7 +389,7 @@ final class BlueprintCaptureController {
             return;
         }
         int nextX = Math.max(1, sizeX() + deltaX);
-        int nextY = Math.max(0, sizeY() + deltaY);
+        int nextY = Math.max(1, sizeY() + deltaY);
         int nextZ = Math.max(1, sizeZ() + deltaZ);
         setSelectionSize(nextX, nextY, nextZ, status);
     }
@@ -280,34 +399,42 @@ final class BlueprintCaptureController {
             status.set(S2CBlueprintStatusPayload.INFO, "screen.rtsbuilding.blueprints.status.save_busy", "");
             return;
         }
-        if (pointA == null || pointB == null) {
+        RtsCullingBox box = selectionBox();
+        if (box == null) {
             status.set(S2CBlueprintStatusPayload.ERROR, "screen.rtsbuilding.blueprints.status.capture_incomplete", "");
             return;
         }
-        int minX = Math.min(pointA.getX(), pointB.getX());
-        int minY = Math.min(pointA.getY(), pointB.getY());
-        int minZ = Math.min(pointA.getZ(), pointB.getZ());
-        int nextMaxX = minX + Math.max(1, sizeX) - 1;
-        int nextMaxY = minY + Math.max(0, sizeY);
-        int nextMaxZ = minZ + Math.max(1, sizeZ) - 1;
-        pointA = new BlockPos(minX, minY, minZ);
-        pointB = new BlockPos(nextMaxX, nextMaxY, nextMaxZ);
-        hoverPoint = pointB;
-        excludedBlocks.removeIf(pos -> !isInsideSelection(pointA, pointB, pos));
-        status.set(S2CBlueprintStatusPayload.INFO, "screen.rtsbuilding.blueprints.status.capture_resized",
-                captureSizeText(pointA, pointB));
+        BlockPos min = box.min();
+        applySelectionBox(new RtsCullingBox(1, min, new BlockPos(
+                min.getX() + Math.max(1, sizeX) - 1,
+                min.getY() + Math.max(1, sizeY) - 1,
+                min.getZ() + Math.max(1, sizeZ) - 1)));
+        status.set(S2CBlueprintStatusPayload.INFO, "screen.rtsbuilding.blueprints.status.capture_resized", sizeText());
+    }
+
+    void adjustSelectionFromHandle(Direction direction, int delta, StatusSink status) {
+        RtsCullingBox box = selectionBox();
+        if (box == null || direction == null || delta == 0) {
+            status.set(S2CBlueprintStatusPayload.ERROR, "screen.rtsbuilding.blueprints.status.capture_incomplete", "");
+            return;
+        }
+        applySelectionBox(box.resizeFromHandle(direction, delta));
+        status.set(S2CBlueprintStatusPayload.INFO, "screen.rtsbuilding.blueprints.status.capture_resized", sizeText());
     }
 
     int sizeX() {
-        return pointA == null || pointB == null ? 0 : Math.abs(pointA.getX() - pointB.getX()) + 1;
+        RtsCullingBox box = selectionBox();
+        return box == null ? 0 : box.width();
     }
 
     int sizeY() {
-        return pointA == null || pointB == null ? 0 : Math.abs(pointA.getY() - pointB.getY());
+        RtsCullingBox box = selectionBox();
+        return box == null ? 0 : box.height();
     }
 
     int sizeZ() {
-        return pointA == null || pointB == null ? 0 : Math.abs(pointA.getZ() - pointB.getZ()) + 1;
+        RtsCullingBox box = selectionBox();
+        return box == null ? 0 : box.depth();
     }
 
     String saveStatusLine() {
@@ -393,11 +520,28 @@ final class BlueprintCaptureController {
         return SaveResult.success(result.path(), result.blueprint(), result.fileName());
     }
 
+    private void applySelectionBox(RtsCullingBox box) {
+        if (box == null) {
+            return;
+        }
+        this.firstWorldCorner = box.min();
+        this.pointA = new BlockPos(box.min().getX(), box.min().getY() - 1, box.min().getZ());
+        this.pointB = box.max();
+        this.hoverPoint = box.max();
+        this.excludedBlocks.removeIf(pos -> !isInsideSelection(pointA, pointB, pos));
+    }
+
     private void resetSelection() {
+        firstWorldCorner = null;
         pointA = null;
         pointB = null;
         hoverPoint = null;
+        handleInteraction.clear();
         excludedBlocks.clear();
+    }
+
+    private static String boxSizeText(RtsCullingBox box) {
+        return box == null ? "" : box.width() + "x" + box.height() + "x" + box.depth();
     }
 
     @FunctionalInterface

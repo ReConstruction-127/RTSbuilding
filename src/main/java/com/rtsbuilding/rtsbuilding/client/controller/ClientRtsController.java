@@ -450,6 +450,10 @@ public final class ClientRtsController {
         return this.storageStateManager.getStorageScanProgress();
     }
 
+    public void clearStorageScanPopupState() {
+        this.storageStateManager.clearStorageScanState();
+    }
+
     public boolean hasStoragePageSnapshot() {
         return this.storageStateManager.hasStoragePageSnapshot();
     }

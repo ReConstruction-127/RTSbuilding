@@ -277,7 +277,7 @@ public final class BlueprintTickPipe implements TickablePipe {
         if (plan == null || plan.blockEntityTag() == null || plan.blockEntityTag().isEmpty()) {
             return null;
         }
-        if (player != null && player.isCreative()) {
+        if (player != null && player.isCreative() && player.canUseGameMasterBlocks()) {
             return plan.blockEntityTag();
         }
         return BlueprintBlockEntitySanitizer.sanitizeForSurvivalPlacement(plan.blockEntityTag());

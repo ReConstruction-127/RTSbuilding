@@ -217,6 +217,10 @@ public final class BuilderScreenConstants {
     public static final ResourceLocation QUICK_BUILD_WALL_BLOCK = quickBuildTexture("wall_block");
     /** PR #71 QuickBuild shape sheet: circle placeholder until final art lands. */
     public static final ResourceLocation QUICK_BUILD_CIRCLE_BLOCK = quickBuildTexture("circle_block");
+    /** QuickBuild shape sheet: cylinder. */
+    public static final ResourceLocation QUICK_BUILD_CYLINDER_BLOCK = quickBuildTexture("cylinder_block");
+    /** QuickBuild shape sheet: ball. */
+    public static final ResourceLocation QUICK_BUILD_BALL_BLOCK = quickBuildTexture("ball_block");
     /** PR #71 QuickBuild shape sheet: box placeholder until final art lands. */
     public static final ResourceLocation QUICK_BUILD_BOX_BLOCK = quickBuildTexture("box_block");
 

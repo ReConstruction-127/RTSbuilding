@@ -327,6 +327,7 @@ public final class ScreenCursorPicker implements RtsCullingWorldInput.Cursor {
         BuildShape shape = this.controller.getBuildShape();
         if (shape == BuildShape.LINE
                 || shape == BuildShape.SQUARE
+                || shape == BuildShape.CYLINDER
                 || shape == BuildShape.BOX) {
             return Direction.UP;
         }

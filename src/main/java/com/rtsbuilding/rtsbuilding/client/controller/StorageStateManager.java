@@ -2,6 +2,7 @@ package com.rtsbuilding.rtsbuilding.client.controller;
 
 import com.rtsbuilding.rtsbuilding.client.network.RtsClientPacketGateway;
 import com.rtsbuilding.rtsbuilding.client.record.*;
+import com.rtsbuilding.rtsbuilding.common.persist.RtsClientUiStateStore;
 import com.rtsbuilding.rtsbuilding.network.craft.S2CRtsCraftFeedbackPayload;
 import com.rtsbuilding.rtsbuilding.network.craft.S2CRtsCraftablesPayload;
 import com.rtsbuilding.rtsbuilding.network.storage.C2SRtsLinkStoragePayload;
@@ -1062,6 +1063,10 @@ public final class StorageStateManager {
     // =========================================================================
 
     private void markStorageScanStarted() {
+        if (!RtsClientUiStateStore.isShowStorageReadyPopupEnabled()) {
+            clearStorageScanState();
+            return;
+        }
         this.storageScanRunning = true;
         this.storageScanStartedAtMs = System.currentTimeMillis();
         this.storageScanVisibleUntilMs = 0L;

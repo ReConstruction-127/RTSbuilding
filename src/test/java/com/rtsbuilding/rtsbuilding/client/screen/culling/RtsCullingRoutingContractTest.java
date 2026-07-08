@@ -52,6 +52,20 @@ class RtsCullingRoutingContractTest {
     }
 
     @Test
+    void activeBoxHandleDragRoutesBeforeCullingDragSwallow() throws IOException {
+        String source = Files.readString(Path.of(
+                "src/main/java/com/rtsbuilding/rtsbuilding/client/screen/standalone/BuilderScreen.java"));
+        String body = methodBody(source, "public boolean mouseDragged");
+
+        int handleDrag = body.indexOf("handleBoxHandleDrag(button, dragX, dragY)");
+        int cullingSwallow = body.indexOf("this.cullingManager.isManagementMode() && button == GLFW.GLFW_MOUSE_BUTTON_LEFT");
+        assertTrue(handleDrag >= 0, "active blueprint/culling handles should receive drag input");
+        assertTrue(cullingSwallow >= 0, "range-culling left drag guard should still exist");
+        assertTrue(handleDrag < cullingSwallow,
+                "active axis-handle dragging must run before range-culling mode consumes left drags");
+    }
+
+    @Test
     void cullingPanelCloseButtonClosesManagementMode() throws IOException {
         String source = Files.readString(Path.of(
                 "src/main/java/com/rtsbuilding/rtsbuilding/client/screen/culling/RtsCullingPanel.java"));

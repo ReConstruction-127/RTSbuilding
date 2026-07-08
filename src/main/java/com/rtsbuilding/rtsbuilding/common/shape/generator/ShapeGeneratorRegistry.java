@@ -33,6 +33,8 @@ public final class ShapeGeneratorRegistry {
         map.put(AreaShape.WALL, new WallShapeGenerator());
         map.put(AreaShape.CIRCLE, new CircleShapeGenerator());
         map.put(AreaShape.BOX, new BoxShapeGenerator());
+        map.put(AreaShape.CYLINDER, new CylinderShapeGenerator());
+        map.put(AreaShape.BALL, new BallShapeGenerator());
         return map;
     }
 

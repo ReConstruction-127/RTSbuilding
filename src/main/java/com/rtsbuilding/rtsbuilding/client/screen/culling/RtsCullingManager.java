@@ -30,14 +30,13 @@ public final class RtsCullingManager {
     private static final int FAST_SCROLL_STEP = 4;
     private static final int MAX_HEIGHT_OFFSET = 255;
 
+    private final RtsBoxHandleInteraction handleInteraction = new RtsBoxHandleInteraction();
     private final List<RtsCullingBox> boxes = new CopyOnWriteArrayList<>();
     private final Set<BlockPos> revealedBlocks = ConcurrentHashMap.newKeySet();
     private boolean managementMode;
     private int nextId = 1;
     private int selectedId = -1;
     private int hoveredId = -1;
-    private Direction hoveredHandleDirection;
-    private Direction activeHandleDirection;
     private BlockPos firstCorner;
     private BlockPos secondCorner;
     private int previewHeight = DEFAULT_HEIGHT;
@@ -68,11 +67,11 @@ public final class RtsCullingManager {
     }
 
     public Direction hoveredHandleDirection() {
-        return hoveredHandleDirection;
+        return handleInteraction.hoveredDirection();
     }
 
     public Direction activeHandleDirection() {
-        return activeHandleDirection;
+        return handleInteraction.activeDirection();
     }
 
     public Phase phase() {
@@ -122,23 +121,23 @@ public final class RtsCullingManager {
         }
         this.managementMode = active;
         this.hoveredId = -1;
-        this.hoveredHandleDirection = null;
-        this.activeHandleDirection = null;
+        this.handleInteraction.clear();
         cancelDraft();
         markAllBoxesDirty();
     }
 
     public void updateHover(Vec3 origin, Vec3 direction) {
-        this.hoveredHandleDirection = null;
         if (!managementMode) {
             this.hoveredId = -1;
+            this.handleInteraction.clear();
             return;
         }
-        Optional<RtsCullingAxisHandle.HandleHit> handleHit = selectedBox()
-                .flatMap(box -> RtsCullingAxisHandle.nearestHit(box, origin, direction, RAY_DISTANCE));
-        if (handleHit.isPresent() && phase == Phase.IDLE) {
+        RtsCullingBox selected = selectedBox().orElse(null);
+        this.handleInteraction.updateHover(selected, origin, direction, phase == Phase.IDLE);
+        if (phase == Phase.IDLE
+                && selected != null
+                && (this.handleInteraction.hoveredDirection() != null || this.handleInteraction.activeDirection() != null)) {
             this.hoveredId = selectedId;
-            this.hoveredHandleDirection = handleHit.get().direction();
             return;
         }
         this.hoveredId = nearestHit(origin, direction)
@@ -150,19 +149,21 @@ public final class RtsCullingManager {
         if (!managementMode) {
             return false;
         }
-        Optional<RtsCullingAxisHandle.HandleHit> handleHit = selectedBox()
-                .flatMap(box -> RtsCullingAxisHandle.nearestHit(box, origin, direction, RAY_DISTANCE));
-        if (handleHit.isPresent() && phase == Phase.IDLE) {
-            this.hoveredId = selectedId;
-            this.hoveredHandleDirection = handleHit.get().direction();
-            this.activeHandleDirection = handleHit.get().direction();
-            return true;
+        if (phase == Phase.IDLE) {
+            Optional<RtsCullingBox> selected = selectedBox();
+            if (selected.isPresent()) {
+                RtsBoxHandleInteraction.ClickResult handleClick =
+                        this.handleInteraction.clickHandle(selected.get(), origin, direction);
+                if (handleClick.handled()) {
+                    this.hoveredId = selectedId;
+                    return true;
+                }
+            }
         }
         Optional<RtsCullingBox.RayHit> boxHit = nearestHit(origin, direction);
         if (boxHit.isPresent() && phase == Phase.IDLE) {
             this.selectedId = boxHit.get().box().id();
-            this.hoveredHandleDirection = null;
-            this.activeHandleDirection = null;
+            this.handleInteraction.clear();
             return true;
         }
         if (hit == null || hit.getType() != HitResult.Type.BLOCK) {
@@ -176,7 +177,7 @@ public final class RtsCullingManager {
                 this.secondCorner = null;
                 this.previewHeight = DEFAULT_HEIGHT;
                 this.selectedId = -1;
-                this.activeHandleDirection = null;
+                this.handleInteraction.clear();
                 this.phase = Phase.NEED_SECOND;
             }
             case NEED_SECOND -> {
@@ -198,18 +199,25 @@ public final class RtsCullingManager {
         if (!managementMode) {
             return false;
         }
+        if (phase == Phase.IDLE) {
+            return this.handleInteraction.handleScroll(scrollY, fast, this::adjustSelectedFromHandle);
+        }
         int delta = scrollY > 0.0D ? 1 : -1;
         if (fast) {
             delta *= FAST_SCROLL_STEP;
-        }
-        if (phase == Phase.IDLE) {
-            return activeHandleDirection != null && adjustSelectedFromHandle(activeHandleDirection, delta);
         }
         RtsCullingBox oldPreview = previewBox();
         this.previewHeight = Mth.clamp(this.previewHeight + delta, -MAX_HEIGHT_OFFSET, MAX_HEIGHT_OFFSET);
         markBoxDirty(oldPreview);
         markBoxDirty(previewBox());
         return true;
+    }
+
+    public boolean handleActiveHandleDrag(double dragX, double dragY, double axisX, double axisY) {
+        if (!managementMode || phase != Phase.IDLE) {
+            return false;
+        }
+        return this.handleInteraction.handleDrag(dragX, dragY, axisX, axisY, this::adjustSelectedFromHandle);
     }
 
     public boolean cancelDraftIfActive() {
@@ -235,8 +243,8 @@ public final class RtsCullingManager {
             return deleteSelected();
         }
         if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
-            if (activeHandleDirection != null) {
-                activeHandleDirection = null;
+            if (this.handleInteraction.releaseActiveHandle()) {
+                return true;
             } else if (phase != Phase.IDLE) {
                 cancelDraft();
             } else {
@@ -269,8 +277,7 @@ public final class RtsCullingManager {
         boxes.removeIf(box -> box.id() == deleting);
         selectedId = -1;
         hoveredId = -1;
-        hoveredHandleDirection = null;
-        activeHandleDirection = null;
+        handleInteraction.clear();
         removed.ifPresent(this::markBoxDirty);
         return true;
     }
@@ -405,8 +412,7 @@ public final class RtsCullingManager {
         this.secondCorner = null;
         this.previewHeight = DEFAULT_HEIGHT;
         this.phase = Phase.IDLE;
-        this.hoveredHandleDirection = null;
-        this.activeHandleDirection = null;
+        this.handleInteraction.clear();
     }
 
     private void markAllBoxesDirty() {
