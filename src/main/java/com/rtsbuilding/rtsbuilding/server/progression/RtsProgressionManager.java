@@ -130,6 +130,7 @@ public final class RtsProgressionManager {
                         personalHome.setGameTime());
             }
         }
+        RtsPluginService.migrateLegacySkillTree(player);
         syncToPlayer(player);
     }
 
