@@ -2,19 +2,15 @@ package com.rtsbuilding.rtsbuilding.server.service.placement;
 
 import com.rtsbuilding.rtsbuilding.Config;
 import com.rtsbuilding.rtsbuilding.network.builder.S2CRtsPlaceAnimationPayload;
-import com.rtsbuilding.rtsbuilding.server.camera.RtsCameraManager;
+import com.rtsbuilding.rtsbuilding.network.builder.S2CRtsBlockActionSoundPayload;
 import com.rtsbuilding.rtsbuilding.server.network.RtsClientboundPackets;
-import com.rtsbuilding.rtsbuilding.server.service.SoundService;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.sounds.SoundSource;
+import net.minecraft.sounds.SoundEvent;
 import net.minecraft.world.level.block.SoundType;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.phys.Vec3;
 
-import java.util.HashMap;
-import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -28,25 +24,24 @@ import java.util.UUID;
  *   <li>{@link #playRemotePlacedBlockAnimation(ServerPlayer, BlockPos)} —
  *       发送方块破坏动画数据包（{@link S2CRtsPlaceAnimationPayload}）给玩家</li>
  *   <li>{@link #playRemotePlacedBlockSound(ServerPlayer, ServerLevel, BlockPos)} —
- *       播放远程放置方块的放置声音，按服务端配置做每 tick 每玩家限流</li>
+ *       播放远程放置方块的放置声音</li>
  *   <li>{@link #playRemoteBlockBreakSound(ServerPlayer, ServerLevel, BlockPos, BlockState)} —
  *       播放远程挖掘方块的破坏声音</li>
  * </ul>
  *
- * <p><b>限流机制：</b>使用静态映射 {@link #PER_PLAYER_SOUNDS_THIS_TICK} 跟踪
- * 每个游戏 tick 每玩家的声音次数，超过 {@link Config#remotePlaceSoundsPerTick()} 后静音，
- * 避免大批量放置/破坏时产生噪音干扰。
+ * <p><b>限流机制：</b>每名玩家每 tick 最多发送
+ * {@link Config#remotePlaceSoundsPerTick()} 个声音。超过上限的声音直接丢弃，不跨 tick 排队，
+ * 因而不会在批量操作结束后继续播放尾音。
  *
- * <p><b>声音定位：</b>声音通过 {@link SoundService#sendDirectSound} 在相机位置
- * （若玩家处于远程相机模式）或玩家眼睛位置播放，确保沉浸式听觉体验。
+ * <p><b>声音定位：</b>服务端只选择方块音色并限流，客户端把它作为相对监听器的方块声音播放，
+ * 避免大范围操作时因为玩家实体与 RTS 相机距离不同而逐渐静音。
  *
  * <p><b>设计原则：</b>此类故意不执行放置、物品提取或批处理作业管理，
  * 这些职责位于放置包的其它类中。
  */
 public final class RtsPlacementSound {
 
-    private static final Map<UUID, Integer> PER_PLAYER_SOUNDS_THIS_TICK = new HashMap<>();
-    private static long SOUND_RESET_TICK = -1L;
+    private static final RtsBlockActionSoundLimiter SOUND_LIMITER = new RtsBlockActionSoundLimiter();
 
     private RtsPlacementSound() {
     }
@@ -65,8 +60,7 @@ public final class RtsPlacementSound {
     /**
      * 播放远程放置方块的位置声音。
      * <p>
-     * 声音被限制为每个游戏 tick 每个玩家最多播放 2 次，
-     * 以避免大批量放置时产生噪音。
+     * 同 tick 超过服务端上限的声音会直接丢弃，不产生延迟尾音。
      */
     public static void playRemotePlacedBlockSound(ServerPlayer player, ServerLevel level,
                                                    BlockPos pos) {
@@ -77,20 +71,16 @@ public final class RtsPlacementSound {
         if (state.isAir()) {
             return;
         }
-        if (!tryConsumeSoundBudget(player, level)) {
+        if (!tryAcquireSound(player, level)) {
             return;
         }
         SoundType soundType = state.getSoundType(level, pos, player);
-        Vec3 soundPos = cameraOrEyePos(player);
-        SoundService.sendDirectSound(
+        sendBlockActionSound(
                 player,
                 soundType.getPlaceSound(),
-                SoundSource.BLOCKS,
-                soundPos.x,
-                soundPos.y,
-                soundPos.z,
                 (soundType.getVolume() + 1.0F) / 2.0F,
-                soundType.getPitch() * 0.8F);
+                soundType.getPitch() * 0.8F,
+                false);
     }
 
     /**
@@ -101,39 +91,44 @@ public final class RtsPlacementSound {
         if (player == null || level == null || pos == null || brokenState == null || !level.hasChunkAt(pos)) {
             return;
         }
-        if (brokenState.isAir() || !tryConsumeSoundBudget(player, level)) {
+        if (brokenState.isAir()) {
+            return;
+        }
+        if (!tryAcquireSound(player, level)) {
             return;
         }
         SoundType soundType = brokenState.getSoundType(level, pos, player);
-        Vec3 soundPos = cameraOrEyePos(player);
-        SoundService.sendDirectSound(
+        sendBlockActionSound(
                 player,
                 soundType.getBreakSound(),
-                SoundSource.BLOCKS,
-                soundPos.x,
-                soundPos.y,
-                soundPos.z,
                 (soundType.getVolume() + 1.0F) / 2.0F,
-                soundType.getPitch() * 0.8F);
+                soundType.getPitch() * 0.8F,
+                true);
     }
 
-    private static boolean tryConsumeSoundBudget(ServerPlayer player, ServerLevel level) {
-        long currentTick = level.getGameTime();
-        if (currentTick != SOUND_RESET_TICK) {
-            SOUND_RESET_TICK = currentTick;
-            PER_PLAYER_SOUNDS_THIS_TICK.clear();
-        }
-        int maxSounds = Config.remotePlaceSoundsPerTick();
-        int count = PER_PLAYER_SOUNDS_THIS_TICK.getOrDefault(player.getUUID(), 0);
-        if (maxSounds <= 0 || count >= maxSounds) {
-            return false;
-        }
-        PER_PLAYER_SOUNDS_THIS_TICK.put(player.getUUID(), count + 1);
-        return true;
+    private static boolean tryAcquireSound(ServerPlayer player, ServerLevel level) {
+        return SOUND_LIMITER.tryAcquire(
+                player.getUUID(),
+                level.getGameTime(),
+                Config.remotePlaceSoundsPerTick());
     }
 
-    private static Vec3 cameraOrEyePos(ServerPlayer player) {
-        Vec3 pos = RtsCameraManager.getCameraPosition(player);
-        return pos != null ? pos : player.getEyePosition();
+    /** 清除离线玩家的 tick 计数状态。 */
+    public static void forgetPlayer(UUID playerId) {
+        SOUND_LIMITER.forget(playerId);
+    }
+
+    private static void sendBlockActionSound(
+            ServerPlayer player, SoundEvent sound, float volume, float pitch, boolean breakAction) {
+        if (player == null || sound == null) {
+            return;
+        }
+        RtsClientboundPackets.sendToPlayer(
+                player,
+                new S2CRtsBlockActionSoundPayload(
+                        sound.getLocation().toString(),
+                        volume,
+                        pitch,
+                        breakAction));
     }
 }

@@ -143,7 +143,7 @@ public final class RtsPlacementServiceImpl implements PlacementService {
                             .rayDirX(rayDirX)
                             .rayDirY(rayDirY)
                             .rayDirZ(rayDirZ)
-                            .quickBuild(false)
+                            .quickBuild(true)
                             .forceEmptyHand(false)
                             .sendRemoteHint(true)
                             .totalBlocks(sanitized.size())

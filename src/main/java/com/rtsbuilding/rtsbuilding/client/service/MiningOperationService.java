@@ -3,6 +3,7 @@ package com.rtsbuilding.rtsbuilding.client.service;
 import com.rtsbuilding.rtsbuilding.client.network.RtsClientPacketGateway;
 import com.rtsbuilding.rtsbuilding.client.record.AreaMineBounds;
 import com.rtsbuilding.rtsbuilding.client.screen.ultimine.AreaMineShape;
+import com.rtsbuilding.rtsbuilding.Config;
 import com.rtsbuilding.rtsbuilding.common.shape.model.AreaShape;
 import com.rtsbuilding.rtsbuilding.common.shape.model.ShapeFillMode;
 import net.minecraft.client.Minecraft;
@@ -30,8 +31,8 @@ public final class MiningOperationService {
     public static final int AREA_MINE_PHASE_NEED_SECOND = 1;
     /** Area mine phase: waiting for scroll-wheel height adjustment then confirm */
     public static final int AREA_MINE_PHASE_NEED_HEIGHT = 2;
-    /** Max blocks per dimension for area mine (12 = at most 11 blocks in one direction) */
-    public static final int AREA_MINE_MAX_SIZE = 12;
+    /** 兼容旧配置的默认单轴上限。实际范围会优先读取服务端配置同步值。 */
+    public static final int AREA_MINE_MAX_SIZE = 36;
 
     // =========================================================================
     //  Mining state fields
@@ -218,27 +219,31 @@ public final class MiningOperationService {
      * @return the clamped boundary result
      */
     public static AreaMineBounds computeAreaMineBounds(BlockPos pointA, BlockPos pointB, int heightOffset) {
-        int maxSize = Math.max(1, AREA_MINE_MAX_SIZE);
-        int dx = Math.min(Math.abs(pointB.getX() - pointA.getX()), maxSize - 1);
+        int maxWidth = configInt(Config::areaMineMaxWidth, AREA_MINE_MAX_SIZE);
+        int maxHeight = configInt(Config::areaMineMaxHeight, AREA_MINE_MAX_SIZE);
+        int maxDepth = configInt(Config::areaMineMaxDepth, AREA_MINE_MAX_SIZE);
+        int maxVolume = configInt(Config::areaMineMaxVolume, AREA_MINE_MAX_SIZE * AREA_MINE_MAX_SIZE * AREA_MINE_MAX_SIZE);
+
+        int dx = Math.min(Math.abs(pointB.getX() - pointA.getX()), maxWidth - 1);
         int minX = pointB.getX() >= pointA.getX() ? pointA.getX() : pointA.getX() - dx;
         int maxX = pointB.getX() >= pointA.getX() ? pointA.getX() + dx : pointA.getX();
 
-        int dz = Math.min(Math.abs(pointB.getZ() - pointA.getZ()), maxSize - 1);
+        int dz = Math.min(Math.abs(pointB.getZ() - pointA.getZ()), maxDepth - 1);
         int minZ = pointB.getZ() >= pointA.getZ() ? pointA.getZ() : pointA.getZ() - dz;
         int maxZ = pointB.getZ() >= pointA.getZ() ? pointA.getZ() + dz : pointA.getZ();
 
         int baseY = pointA.getY();
-        int minY = Math.max(baseY - (maxSize - 1), baseY + Math.min(0, heightOffset));
-        int maxY = Math.min(baseY + (maxSize - 1), baseY + Math.max(0, heightOffset));
+        int minY = Math.max(baseY - (maxHeight - 1), baseY + Math.min(0, heightOffset));
+        int maxY = Math.min(baseY + (maxHeight - 1), baseY + Math.max(0, heightOffset));
 
-        return new AreaMineBounds(minX, maxX, minY, maxY, minZ, maxZ);
+        return clampAreaMineBounds(new AreaMineBounds(minX, maxX, minY, maxY, minZ, maxZ), maxVolume);
     }
 
     // ---------- Height setting ----------
 
     public void setAreaMineHeightOffset(int offset) {
-        int maxSize = Math.max(1, AREA_MINE_MAX_SIZE);
-        this.areaMineHeightOffset = Math.max(-(maxSize - 1), Math.min(maxSize - 1, offset));
+        int maxHeight = configInt(Config::areaMineMaxHeight, AREA_MINE_MAX_SIZE);
+        this.areaMineHeightOffset = Math.max(-(maxHeight - 1), Math.min(maxHeight - 1, offset));
     }
 
     public void adjustAreaMineHeightOffset(int delta) {
@@ -372,6 +377,38 @@ public final class MiningOperationService {
             case BLOCK, CHAIN -> AreaShape.BLOCK;
         };
         return (byte) areaShape.ordinal();
+    }
+
+    private static AreaMineBounds clampAreaMineBounds(AreaMineBounds bounds, int maxVolume) {
+        int minX = Math.min(bounds.minX(), bounds.maxX());
+        int maxX = Math.max(bounds.minX(), bounds.maxX());
+        int minY = Math.min(bounds.minY(), bounds.maxY());
+        int maxY = Math.max(bounds.minY(), bounds.maxY());
+        int minZ = Math.min(bounds.minZ(), bounds.maxZ());
+        int maxZ = Math.max(bounds.minZ(), bounds.maxZ());
+        int width = (maxX - minX) + 1;
+        int height = (maxY - minY) + 1;
+        int depth = (maxZ - minZ) + 1;
+        while ((long) width * height * depth > Math.max(1, maxVolume)) {
+            if (height >= width && height >= depth && height > 1) {
+                height--;
+            } else if (width >= depth && width > 1) {
+                width--;
+            } else if (depth > 1) {
+                depth--;
+            } else {
+                break;
+            }
+        }
+        return new AreaMineBounds(minX, minX + width - 1, minY, minY + height - 1, minZ, minZ + depth - 1);
+    }
+
+    private static int configInt(java.util.function.IntSupplier supplier, int fallback) {
+        try {
+            return Math.max(1, supplier.getAsInt());
+        } catch (IllegalStateException ignored) {
+            return fallback;
+        }
     }
 
     // =========================================================================

@@ -129,13 +129,13 @@ public final class RtsUltimineProcessor {
         }
 
         // 限定范围
-        int clampedMinX = minX;
-        int areaMineMaxSize = RtsMiningValidator.areaMineMaxSize();
-        int clampedMaxX = Math.min(clampedMinX + areaMineMaxSize - 1, maxX);
-        int clampedMinZ = minZ;
-        int clampedMaxZ = Math.min(clampedMinZ + areaMineMaxSize - 1, maxZ);
-        int clampedMinY = minY;
-        int clampedMaxY = Math.min(clampedMinY + areaMineMaxSize - 1, maxY);
+        AreaMineLimitBox limited = limitAreaMineBox(minX, maxX, minY, maxY, minZ, maxZ);
+        int clampedMinX = limited.minX();
+        int clampedMaxX = limited.maxX();
+        int clampedMinY = limited.minY();
+        int clampedMaxY = limited.maxY();
+        int clampedMinZ = limited.minZ();
+        int clampedMaxZ = limited.maxZ();
 
         boolean selectedToolRequested = !player.isCreative() && session.mining.miningSelectedToolRequested;
         RtsToolLease toolLease = player.isCreative()
@@ -373,13 +373,13 @@ public final class RtsUltimineProcessor {
         }
 
         // 限定范围
-        int clampedMinX = minX;
-        int areaMineMaxSize = RtsMiningValidator.areaMineMaxSize();
-        int clampedMaxX = Math.min(clampedMinX + areaMineMaxSize - 1, maxX);
-        int clampedMinZ = minZ;
-        int clampedMaxZ = Math.min(clampedMinZ + areaMineMaxSize - 1, maxZ);
-        int clampedMinY = minY;
-        int clampedMaxY = Math.min(clampedMinY + areaMineMaxSize - 1, maxY);
+        AreaMineLimitBox limitBox = limitAreaMineBox(minX, maxX, minY, maxY, minZ, maxZ);
+        int clampedMinX = limitBox.minX();
+        int clampedMaxX = limitBox.maxX();
+        int clampedMinY = limitBox.minY();
+        int clampedMaxY = limitBox.maxY();
+        int clampedMinZ = limitBox.minZ();
+        int clampedMaxZ = limitBox.maxZ();
 
         // Creative mode: break immediately
         if (player.isCreative()) {
@@ -433,6 +433,43 @@ public final class RtsUltimineProcessor {
         return targets.size();
     }
 
+    static AreaMineLimitBox limitAreaMineBox(int minX, int maxX, int minY, int maxY, int minZ, int maxZ) {
+        int safeMinX = Math.min(minX, maxX);
+        int safeMaxX = Math.max(minX, maxX);
+        int safeMinY = Math.min(minY, maxY);
+        int safeMaxY = Math.max(minY, maxY);
+        int safeMinZ = Math.min(minZ, maxZ);
+        int safeMaxZ = Math.max(minZ, maxZ);
+
+        int width = Math.max(1, Math.min(safeMaxX - safeMinX + 1, RtsMiningValidator.areaMineMaxWidth()));
+        int height = Math.max(1, Math.min(safeMaxY - safeMinY + 1, RtsMiningValidator.areaMineMaxHeight()));
+        int depth = Math.max(1, Math.min(safeMaxZ - safeMinZ + 1, RtsMiningValidator.areaMineMaxDepth()));
+        int maxVolume = Math.max(1, RtsMiningValidator.areaMineMaxVolume());
+
+        while ((long) width * height * depth > maxVolume) {
+            if (height >= width && height >= depth && height > 1) {
+                height--;
+            } else if (width >= depth && width > 1) {
+                width--;
+            } else if (depth > 1) {
+                depth--;
+            } else {
+                break;
+            }
+        }
+
+        return new AreaMineLimitBox(
+                safeMinX,
+                safeMinX + width - 1,
+                safeMinY,
+                safeMinY + height - 1,
+                safeMinZ,
+                safeMinZ + depth - 1);
+    }
+
+    record AreaMineLimitBox(int minX, int maxX, int minY, int maxY, int minZ, int maxZ) {
+    }
+
     /**
      * Filters a list of explicit positions to valid, breakable targets.
      * Unlike the original, waterlogged blocks are <b>not</b> excluded.
@@ -446,12 +483,26 @@ public final class RtsUltimineProcessor {
         // 从上往下逐层破坏：按Y降序排列
         List<BlockPos> sortedPositions = new ArrayList<>(positions);
         sortedPositions.sort(Comparator.<BlockPos>comparingInt(BlockPos::getY).reversed());
+        int maxExplicitTargets = Math.min(
+                RtsMiningValidator.areaDestroyMaxTargets(),
+                RtsMiningValidator.areaMineMaxVolume());
+        AreaMineLimitBox explicitLimit = explicitAreaDestroyFitsSoftEnvelopeForCaps(
+                positions,
+                RtsMiningValidator.areaMineMaxWidth(),
+                RtsMiningValidator.areaMineMaxHeight(),
+                RtsMiningValidator.areaMineMaxDepth(),
+                maxExplicitTargets)
+                        ? null
+                        : limitExplicitAreaDestroyBox(sortedPositions);
         LinkedHashSet<BlockPos> unique = new LinkedHashSet<>();
         for (BlockPos raw : sortedPositions) {
-            if (raw == null || unique.size() >= RtsMiningValidator.areaDestroyMaxTargets()) {
+            if (raw == null || unique.size() >= maxExplicitTargets) {
                 continue;
             }
             BlockPos pos = raw.immutable();
+            if (explicitLimit != null && !contains(explicitLimit, pos)) {
+                continue;
+            }
             if (!RtsLinkedStorageResolver.canAccessWorldTarget(player, pos)) {
                 continue;
             }
@@ -471,6 +522,72 @@ public final class RtsUltimineProcessor {
             unique.add(pos);
         }
         return new ArrayDeque<>(unique);
+    }
+
+    static boolean explicitAreaDestroyFitsSoftEnvelopeForCaps(
+            List<BlockPos> positions, int maxWidth, int maxHeight, int maxDepth, int maxTargets) {
+        if (positions == null || positions.isEmpty()) {
+            return true;
+        }
+        int minX = Integer.MAX_VALUE;
+        int minY = Integer.MAX_VALUE;
+        int minZ = Integer.MAX_VALUE;
+        int maxX = Integer.MIN_VALUE;
+        int maxY = Integer.MIN_VALUE;
+        int maxZ = Integer.MIN_VALUE;
+        int count = 0;
+        for (BlockPos pos : positions) {
+            if (pos == null) {
+                continue;
+            }
+            count++;
+            minX = Math.min(minX, pos.getX());
+            minY = Math.min(minY, pos.getY());
+            minZ = Math.min(minZ, pos.getZ());
+            maxX = Math.max(maxX, pos.getX());
+            maxY = Math.max(maxY, pos.getY());
+            maxZ = Math.max(maxZ, pos.getZ());
+        }
+        if (count == 0) {
+            return true;
+        }
+        return count <= Math.max(1, maxTargets)
+                && (maxX - minX + 1) <= Math.max(1, maxWidth) + 1
+                && (maxY - minY + 1) <= Math.max(1, maxHeight) + 1
+                && (maxZ - minZ + 1) <= Math.max(1, maxDepth) + 1;
+    }
+
+    private static AreaMineLimitBox limitExplicitAreaDestroyBox(List<BlockPos> positions) {
+        if (positions == null || positions.isEmpty()) {
+            return null;
+        }
+        int minX = Integer.MAX_VALUE;
+        int minY = Integer.MAX_VALUE;
+        int minZ = Integer.MAX_VALUE;
+        int maxX = Integer.MIN_VALUE;
+        int maxY = Integer.MIN_VALUE;
+        int maxZ = Integer.MIN_VALUE;
+        for (BlockPos pos : positions) {
+            if (pos == null) {
+                continue;
+            }
+            minX = Math.min(minX, pos.getX());
+            minY = Math.min(minY, pos.getY());
+            minZ = Math.min(minZ, pos.getZ());
+            maxX = Math.max(maxX, pos.getX());
+            maxY = Math.max(maxY, pos.getY());
+            maxZ = Math.max(maxZ, pos.getZ());
+        }
+        if (minX == Integer.MAX_VALUE) {
+            return null;
+        }
+        return limitAreaMineBox(minX, maxX, minY, maxY, minZ, maxZ);
+    }
+
+    private static boolean contains(AreaMineLimitBox box, BlockPos pos) {
+        return pos.getX() >= box.minX() && pos.getX() <= box.maxX()
+                && pos.getY() >= box.minY() && pos.getY() <= box.maxY()
+                && pos.getZ() >= box.minZ() && pos.getZ() <= box.maxZ();
     }
 
     // =========================================================================

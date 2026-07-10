@@ -10,6 +10,7 @@ import com.rtsbuilding.rtsbuilding.client.screen.handler.PlacementHistoryManager
 import com.rtsbuilding.rtsbuilding.client.screen.standalone.BuilderScreen;
 import com.rtsbuilding.rtsbuilding.client.screen.workflow.RtsBlueprintResumePanel;
 import com.rtsbuilding.rtsbuilding.client.screen.workflow.RtsResumePlacementPanel;
+import com.rtsbuilding.rtsbuilding.client.sound.RtsBlockActionSoundPlayer;
 import com.rtsbuilding.rtsbuilding.network.blueprint.S2CBlueprintStatusPayload;
 import com.rtsbuilding.rtsbuilding.network.builder.*;
 import com.rtsbuilding.rtsbuilding.network.camera.S2CRtsCameraAnchorPayload;
@@ -86,6 +87,10 @@ public final class RtsClientNetworkHandlers {
             PlacementAnimationRenderer.addDestroy(payload.pos(), payload.state());
             ShapeGhostRenderer.markDestroyed(payload.pos());
         });
+    }
+
+    public static void handleBlockActionSound(S2CRtsBlockActionSoundPayload payload, IPayloadContext context) {
+        context.enqueueWork(() -> RtsBlockActionSoundPlayer.play(payload));
     }
 
     public static void handleProgressionState(S2CRtsProgressionStatePayload payload, IPayloadContext context) {

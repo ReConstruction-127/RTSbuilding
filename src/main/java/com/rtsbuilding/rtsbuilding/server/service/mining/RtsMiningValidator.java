@@ -24,8 +24,8 @@ import net.minecraft.world.level.block.state.BlockState;
  * <p><b>常量限制：</b>
  * <ul>
  *   <li>{@link #ULTIMINE_MAX_BLOCKS}=256 — BFS 连锁挖掘收集的硬上限</li>
- *   <li>{@link #AREA_MINE_MAX_SIZE}=12 — 区域挖掘每个维度的最大范围</li>
- *   <li>{@link #AREA_DESTROY_MAX_TARGETS}=32768 — 区域破坏接受的最大位置数</li>
+ *   <li>{@link #AREA_MINE_MAX_SIZE}=36 — 区域挖掘每个维度的最大范围</li>
+ *   <li>{@link #AREA_DESTROY_MAX_TARGETS}=98304 — 区域破坏接受的最大位置数</li>
  *   <li>{@link #ULTIMINE_BLOCKS_PER_TICK}=8 — 每 tick 处理的连锁挖掘目标数（节流）</li>
  * </ul>
  *
@@ -49,10 +49,10 @@ public final class RtsMiningValidator {
     public static final int ULTIMINE_MAX_BLOCKS = 256;
 
     /** 区域挖掘每维度最大方块数（X、Y、Z）。 */
-    public static final int AREA_MINE_MAX_SIZE = 12;
+    public static final int AREA_MINE_MAX_SIZE = 36;
 
     /** 快速建造接受的显式形状破坏最大目标数。 */
-    public static final int AREA_DESTROY_MAX_TARGETS = 32768;
+    public static final int AREA_DESTROY_MAX_TARGETS = 98304;
 
     /** 单个 tick 中处理的连锁挖掘目标数。 */
     public static final int ULTIMINE_BLOCKS_PER_TICK = 8;
@@ -69,6 +69,22 @@ public final class RtsMiningValidator {
 
     public static int areaMineMaxSize() {
         return configIntOrDefault(Config::areaMineMaxSize, AREA_MINE_MAX_SIZE);
+    }
+
+    public static int areaMineMaxVolume() {
+        return configIntOrDefault(Config::areaMineMaxVolume, AREA_MINE_MAX_SIZE * AREA_MINE_MAX_SIZE * AREA_MINE_MAX_SIZE);
+    }
+
+    public static int areaMineMaxWidth() {
+        return configIntOrDefault(Config::areaMineMaxWidth, areaMineMaxSize());
+    }
+
+    public static int areaMineMaxHeight() {
+        return configIntOrDefault(Config::areaMineMaxHeight, areaMineMaxSize());
+    }
+
+    public static int areaMineMaxDepth() {
+        return configIntOrDefault(Config::areaMineMaxDepth, areaMineMaxSize());
     }
 
     public static int areaDestroyMaxTargets() {

@@ -768,6 +768,54 @@ public final class ClientRtsController {
         this.cameraOrbitService.cycleInputSensitivity();
     }
 
+    public String getPanDragSensitivityLabel() {
+        return this.cameraOrbitService.getPanDragSensitivityLabel();
+    }
+
+    public int getPanDragSensitivityIndex() {
+        return this.cameraOrbitService.getPanDragSensitivityIndex();
+    }
+
+    public void setPanDragSensitivityByFraction(double fraction) {
+        this.cameraOrbitService.setPanDragSensitivityByFraction(fraction);
+    }
+
+    public String getRotateViewSensitivityLabel() {
+        return this.cameraOrbitService.getRotateViewSensitivityLabel();
+    }
+
+    public int getRotateViewSensitivityIndex() {
+        return this.cameraOrbitService.getRotateViewSensitivityIndex();
+    }
+
+    public void setRotateViewSensitivityByFraction(double fraction) {
+        this.cameraOrbitService.setRotateViewSensitivityByFraction(fraction);
+    }
+
+    public String getKeyboardMoveSensitivityLabel() {
+        return this.cameraOrbitService.getKeyboardMoveSensitivityLabel();
+    }
+
+    public int getKeyboardMoveSensitivityIndex() {
+        return this.cameraOrbitService.getKeyboardMoveSensitivityIndex();
+    }
+
+    public void setKeyboardMoveSensitivityByFraction(double fraction) {
+        this.cameraOrbitService.setKeyboardMoveSensitivityByFraction(fraction);
+    }
+
+    public String getWheelZoomSensitivityLabel() {
+        return this.cameraOrbitService.getWheelZoomSensitivityLabel();
+    }
+
+    public int getWheelZoomSensitivityIndex() {
+        return this.cameraOrbitService.getWheelZoomSensitivityIndex();
+    }
+
+    public void setWheelZoomSensitivityByFraction(double fraction) {
+        this.cameraOrbitService.setWheelZoomSensitivityByFraction(fraction);
+    }
+
     public void increaseRotateSensitivity() {
         this.cameraOrbitService.increaseRotateSensitivity();
     }
@@ -1423,7 +1471,7 @@ public final class ClientRtsController {
         if (minecraft.screen instanceof BuilderScreen builderScreen) {
             builderScreen.triggerDamageFlash();
         }
-        if (this.damageSoundEnabled) {
+        if (RtsClientUiStateStore.isRtsSoundsEnabled() && this.damageSoundEnabled) {
             float volume = Mth.clamp(0.45F + Math.max(0.0F, payload.amount()) * 0.08F, 0.45F, 1.2F);
             minecraft.player.playSound(SoundEvents.PLAYER_HURT, volume, 1.0F);
         }

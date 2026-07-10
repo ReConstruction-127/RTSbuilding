@@ -80,6 +80,8 @@ public final class ClientPayloadDispatcher {
                     RtsClientNetworkHandlers.handlePlaceAnimation(p, ctx);
             case S2CRtsBreakAnimationPayload p ->
                     RtsClientNetworkHandlers.handleBreakAnimation(p, ctx);
+            case S2CRtsBlockActionSoundPayload p ->
+                    RtsClientNetworkHandlers.handleBlockActionSound(p, ctx);
             case S2CRtsHistorySyncPayload p ->
                     RtsClientNetworkHandlers.handleHistorySync(p, ctx);
             case S2CRtsWorkflowProgressPayload p ->

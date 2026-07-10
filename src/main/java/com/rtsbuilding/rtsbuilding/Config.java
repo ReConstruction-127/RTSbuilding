@@ -87,7 +87,27 @@ public class Config {
     public static final ModConfigSpec.IntValue AREA_MINE_MAX_SIZE = SERVER_BUILDER
             .comment("Maximum block count per dimension for RTS area mining selections.")
             .translation("rtsbuilding.configuration.areaMineMaxSize")
-            .defineInRange("mining.areaMineMaxSize", 12, 1, 64);
+            .defineInRange("mining.areaMineMaxSize", 36, 1, 64);
+
+    public static final ModConfigSpec.IntValue AREA_MINE_MAX_VOLUME = SERVER_BUILDER
+            .comment("Maximum covered volume, width * height * depth, accepted by one RTS area mining selection.")
+            .translation("rtsbuilding.configuration.areaMineMaxVolume")
+            .defineInRange("mining.areaMineMaxVolume", 46656, 1, 262144);
+
+    public static final ModConfigSpec.IntValue AREA_MINE_MAX_WIDTH = SERVER_BUILDER
+            .comment("Maximum X-axis width accepted by one RTS area mining selection.")
+            .translation("rtsbuilding.configuration.areaMineMaxWidth")
+            .defineInRange("mining.areaMineMaxWidth", 36, 1, 256);
+
+    public static final ModConfigSpec.IntValue AREA_MINE_MAX_HEIGHT = SERVER_BUILDER
+            .comment("Maximum Y-axis height accepted by one RTS area mining selection.")
+            .translation("rtsbuilding.configuration.areaMineMaxHeight")
+            .defineInRange("mining.areaMineMaxHeight", 36, 1, 256);
+
+    public static final ModConfigSpec.IntValue AREA_MINE_MAX_DEPTH = SERVER_BUILDER
+            .comment("Maximum Z-axis depth accepted by one RTS area mining selection.")
+            .translation("rtsbuilding.configuration.areaMineMaxDepth")
+            .defineInRange("mining.areaMineMaxDepth", 36, 1, 256);
 
     public static final ModConfigSpec.IntValue AE2_NETWORK_REFRESH_THROTTLE = SERVER_BUILDER
             .comment("Number of storage cache refresh cycles between expensive AE2 network snapshots.")
@@ -117,7 +137,7 @@ public class Config {
     public static final ModConfigSpec.IntValue AREA_DESTROY_MAX_TARGETS = SERVER_BUILDER
             .comment("Maximum explicit positions accepted by one RTS area destroy request.")
             .translation("rtsbuilding.configuration.areaDestroyMaxTargets")
-            .defineInRange("mining.areaDestroyMaxTargets", 32768, 1, 262144);
+            .defineInRange("mining.areaDestroyMaxTargets", 98304, 1, 262144);
 
     public static final ModConfigSpec.IntValue ULTIMINE_BLOCKS_PER_TICK = SERVER_BUILDER
             .comment("Maximum queued chain mining targets processed per player per server tick.")
@@ -145,9 +165,9 @@ public class Config {
             .defineInRange("mining.dropScanRadius", 1.25D, 0.25D, 8.0D);
 
     public static final ModConfigSpec.IntValue REMOTE_PLACE_SOUNDS_PER_TICK = SERVER_BUILDER
-            .comment("Maximum RTS remote block action sounds emitted per player per tick.")
+            .comment("Maximum RTS remote block action sounds sent per player per tick. Excess sounds are dropped.")
             .translation("rtsbuilding.configuration.remotePlaceSoundsPerTick")
-            .defineInRange("placement.remotePlaceSoundsPerTick", 1, 0, 16);
+            .defineInRange("placement.remoteBlockActionSoundsPerTick", 16, 0, 16);
 
     public static final ModConfigSpec.IntValue INTERNAL_FLUID_CAPACITY_BUCKETS = SERVER_BUILDER
             .comment("Fallback internal fluid buffer capacity in buckets when progression data is unavailable.")
@@ -181,23 +201,27 @@ public class Config {
     }
 
     public static void saveGeneralSettings(boolean survivalEnabled, boolean shareWithTeams, int radiusBlocks,
-            boolean blueprintsEnabled, int maxBlueprintBlocks, boolean placementBlockGhostPreview,
-            boolean placeBlockGhostAnimation, boolean destroyBlockGhostAnimation, boolean placementWireframePreview,
-            boolean placeWireframeAnimation, boolean destroyWireframeAnimation, boolean rangeDestroySkeleton) {
+            boolean blueprintsEnabled, int maxBlueprintBlocks) {
         ENABLE_SURVIVAL_PROGRESSION.set(survivalEnabled);
         SHARE_SURVIVAL_PROGRESSION_WITH_TEAMS.set(shareWithTeams);
-        MAX_ACTION_RADIUS_BLOCKS.set(Math.max(48, Math.min(512, radiusBlocks)));
+        MAX_ACTION_RADIUS_BLOCKS.set(clampInt(radiusBlocks, 48, 512));
         ENABLE_BLUEPRINTS.set(blueprintsEnabled);
-        MAX_BLUEPRINT_BLOCKS.set(Math.max(1, Math.min(200000, maxBlueprintBlocks)));
-        USE_BLOCK_GHOST_PREVIEW.set(placementBlockGhostPreview);
-        USE_PLACE_BLOCK_GHOST_ANIMATION.set(placeBlockGhostAnimation);
-        USE_DESTROY_BLOCK_GHOST_ANIMATION.set(destroyBlockGhostAnimation);
-        USE_WIREFRAME_PREVIEW.set(placementWireframePreview);
-        USE_PLACE_WIREFRAME_ANIMATION.set(placeWireframeAnimation);
-        USE_DESTROY_WIREFRAME_ANIMATION.set(destroyWireframeAnimation);
-        USE_RANGE_DESTROY_SKELETON.set(rangeDestroySkeleton);
+        MAX_BLUEPRINT_BLOCKS.set(clampInt(maxBlueprintBlocks, 1, 200000));
         SPEC.save();
-        CLIENT_SPEC.save();
+    }
+
+    public static void saveAreaMineLimitSettings(int maxWidth, int maxHeight, int maxDepth,
+            int maxVolume, int maxTargets) {
+        int width = clampInt(maxWidth, 1, 256);
+        int height = clampInt(maxHeight, 1, 256);
+        int depth = clampInt(maxDepth, 1, 256);
+        AREA_MINE_MAX_WIDTH.set(width);
+        AREA_MINE_MAX_HEIGHT.set(height);
+        AREA_MINE_MAX_DEPTH.set(depth);
+        AREA_MINE_MAX_VOLUME.set(clampInt(maxVolume, 1, 262144));
+        AREA_DESTROY_MAX_TARGETS.set(clampInt(maxTargets, 1, 262144));
+        AREA_MINE_MAX_SIZE.set(clampInt(Math.max(width, Math.max(height, depth)), 1, 64));
+        SERVER_SPEC.save();
     }
 
     public static boolean isPlacementBlockGhostPreviewEnabled() {
@@ -280,6 +304,22 @@ public class Config {
         return AREA_MINE_MAX_SIZE.getAsInt();
     }
 
+    public static int areaMineMaxVolume() {
+        return AREA_MINE_MAX_VOLUME.getAsInt();
+    }
+
+    public static int areaMineMaxWidth() {
+        return AREA_MINE_MAX_WIDTH.getAsInt();
+    }
+
+    public static int areaMineMaxHeight() {
+        return AREA_MINE_MAX_HEIGHT.getAsInt();
+    }
+
+    public static int areaMineMaxDepth() {
+        return AREA_MINE_MAX_DEPTH.getAsInt();
+    }
+
     public static int ae2NetworkRefreshThrottle() {
         return AE2_NETWORK_REFRESH_THROTTLE.getAsInt();
     }
@@ -330,6 +370,10 @@ public class Config {
 
     public static long internalFluidCapacityMb() {
         return Math.max(1L, (long) INTERNAL_FLUID_CAPACITY_BUCKETS.getAsInt()) * FluidType.BUCKET_VOLUME;
+    }
+
+    private static int clampInt(int value, int min, int max) {
+        return Math.max(min, Math.min(max, value));
     }
 
 }

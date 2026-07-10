@@ -12,7 +12,6 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.util.Mth;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -303,7 +302,6 @@ public final class CameraInputHandler {
         return isKeyboardPanDragActionHeld()
                 && screen.isWorldArea(mouseX, mouseY)
                 && !screen.isMouseOverFloatingWindow(mouseX, mouseY)
-                && !screen.isDraggingInputSensitivity()
                 && !screen.isSearchFocused();
     }
 
@@ -468,16 +466,6 @@ public final class CameraInputHandler {
     }
 
     // ======================== 输入灵敏度 ========================
-
-    public void updateInputSensitivityFromMouse(double mouseX) {
-        int menuW = Math.min(300, screen.width - 24);
-        int menuX = (screen.width - menuW) / 2;
-        int trackX = menuX + 16;
-        int trackW = menuW - 32;
-        double fraction = (mouseX - trackX) / (double) trackW;
-        fraction = Mth.clamp(fraction, 0.0D, 1.0D);
-        this.controller.setInputSensitivityByFraction(fraction);
-    }
 
     // ======================== Modifier 查询 ========================
 

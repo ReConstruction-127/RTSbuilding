@@ -22,17 +22,20 @@ public final class RtsModConfigScreen extends Screen {
     private boolean survivalEnabled = Config.ENABLE_SURVIVAL_PROGRESSION.getAsBoolean();
     private boolean shareWithTeams = Config.SHARE_SURVIVAL_PROGRESSION_WITH_TEAMS.getAsBoolean();
     private boolean blueprintsEnabled = Config.ENABLE_BLUEPRINTS.getAsBoolean();
-    private boolean placementBlockGhostPreview = Config.isPlacementBlockGhostPreviewEnabled();
-    private boolean placeBlockGhostAnimation = Config.isPlaceBlockGhostAnimationEnabled();
-    private boolean destroyBlockGhostAnimation = Config.isDestroyBlockGhostAnimationEnabled();
-    private boolean placementWireframePreview = Config.isPlacementWireframePreviewEnabled();
-    private boolean placeWireframeAnimation = Config.isPlaceWireframeAnimationEnabled();
-    private boolean destroyWireframeAnimation = Config.isDestroyWireframeAnimationEnabled();
-    private boolean rangeDestroySkeleton = Config.isRangeDestroySkeletonEnabled();
     private String draftMaxRadius = Integer.toString(Config.maxActionRadiusBlocks());
     private String draftMaxBlueprintBlocks = Integer.toString(Config.maxBlueprintBlocks());
+    private String draftAreaMineMaxWidth = Integer.toString(Config.areaMineMaxWidth());
+    private String draftAreaMineMaxHeight = Integer.toString(Config.areaMineMaxHeight());
+    private String draftAreaMineMaxDepth = Integer.toString(Config.areaMineMaxDepth());
+    private String draftAreaMineMaxVolume = Integer.toString(Config.areaMineMaxVolume());
+    private String draftAreaDestroyMaxTargets = Integer.toString(Config.areaDestroyMaxTargets());
     private EditBox maxRadiusBox;
     private EditBox maxBlueprintBlocksBox;
+    private EditBox areaMineMaxWidthBox;
+    private EditBox areaMineMaxHeightBox;
+    private EditBox areaMineMaxDepthBox;
+    private EditBox areaMineMaxVolumeBox;
+    private EditBox areaDestroyMaxTargetsBox;
     private int scroll;
 
     public RtsModConfigScreen(Screen parent) {
@@ -89,6 +92,11 @@ public final class RtsModConfigScreen extends Screen {
         clearWidgets();
         this.maxRadiusBox = null;
         this.maxBlueprintBlocksBox = null;
+        this.areaMineMaxWidthBox = null;
+        this.areaMineMaxHeightBox = null;
+        this.areaMineMaxDepthBox = null;
+        this.areaMineMaxVolumeBox = null;
+        this.areaDestroyMaxTargetsBox = null;
         this.scroll = Mth.clamp(this.scroll, 0, maxScroll());
         addGeneralWidgets();
         addFooterButtons();
@@ -122,13 +130,8 @@ public final class RtsModConfigScreen extends Screen {
         y += OPTION_ROW_H;
 
         if (fullyVisible(y, OPTION_ROW_H)) {
-            this.maxRadiusBox = new EditBox(this.font, controlX, y + 10, controlW, 18,
-                    Component.translatable("config.rtsbuilding.max_radius"));
-            this.maxRadiusBox.setMaxLength(4);
-            this.maxRadiusBox.setValue(this.draftMaxRadius);
-            this.maxRadiusBox.setTextColor(0xFFFFFFFF);
-            this.maxRadiusBox.setTextColorUneditable(0xFFB8C7D6);
-            addRenderableWidget(this.maxRadiusBox);
+            this.maxRadiusBox = addIntegerBox(controlX, y, controlW,
+                    Component.translatable("config.rtsbuilding.max_radius"), this.draftMaxRadius, 4);
         }
         y += OPTION_ROW_H + 6 + SECTION_H;
 
@@ -143,84 +146,50 @@ public final class RtsModConfigScreen extends Screen {
         y += OPTION_ROW_H;
 
         if (fullyVisible(y, OPTION_ROW_H)) {
-            this.maxBlueprintBlocksBox = new EditBox(this.font, controlX, y + 10, controlW, 18,
-                    Component.translatable("config.rtsbuilding.max_blueprint_blocks"));
-            this.maxBlueprintBlocksBox.setMaxLength(6);
-            this.maxBlueprintBlocksBox.setValue(this.draftMaxBlueprintBlocks);
-            this.maxBlueprintBlocksBox.setTextColor(0xFFFFFFFF);
-            this.maxBlueprintBlocksBox.setTextColorUneditable(0xFFB8C7D6);
-            addRenderableWidget(this.maxBlueprintBlocksBox);
+            this.maxBlueprintBlocksBox = addIntegerBox(controlX, y, controlW,
+                    Component.translatable("config.rtsbuilding.max_blueprint_blocks"), this.draftMaxBlueprintBlocks, 6);
         }
         y += OPTION_ROW_H + 6 + SECTION_H;
 
         if (fullyVisible(y, OPTION_ROW_H)) {
-            addRenderableWidget(Button.builder(Component.translatable(this.placementBlockGhostPreview
-                    ? "config.rtsbuilding.enabled"
-                    : "config.rtsbuilding.disabled"), btn -> {
-                this.placementBlockGhostPreview = !this.placementBlockGhostPreview;
-                rebuildConfigWidgets();
-            }).bounds(controlX, y + 9, controlW, 20).build());
+            this.areaMineMaxWidthBox = addIntegerBox(controlX, y, controlW,
+                    Component.translatable("config.rtsbuilding.area_mine_max_width"), this.draftAreaMineMaxWidth, 3);
         }
         y += OPTION_ROW_H;
 
         if (fullyVisible(y, OPTION_ROW_H)) {
-            addRenderableWidget(Button.builder(Component.translatable(this.placeBlockGhostAnimation
-                    ? "config.rtsbuilding.enabled"
-                    : "config.rtsbuilding.disabled"), btn -> {
-                this.placeBlockGhostAnimation = !this.placeBlockGhostAnimation;
-                rebuildConfigWidgets();
-            }).bounds(controlX, y + 9, controlW, 20).build());
+            this.areaMineMaxHeightBox = addIntegerBox(controlX, y, controlW,
+                    Component.translatable("config.rtsbuilding.area_mine_max_height"), this.draftAreaMineMaxHeight, 3);
         }
         y += OPTION_ROW_H;
 
         if (fullyVisible(y, OPTION_ROW_H)) {
-            addRenderableWidget(Button.builder(Component.translatable(this.destroyBlockGhostAnimation
-                    ? "config.rtsbuilding.enabled"
-                    : "config.rtsbuilding.disabled"), btn -> {
-                this.destroyBlockGhostAnimation = !this.destroyBlockGhostAnimation;
-                rebuildConfigWidgets();
-            }).bounds(controlX, y + 9, controlW, 20).build());
+            this.areaMineMaxDepthBox = addIntegerBox(controlX, y, controlW,
+                    Component.translatable("config.rtsbuilding.area_mine_max_depth"), this.draftAreaMineMaxDepth, 3);
         }
         y += OPTION_ROW_H;
 
         if (fullyVisible(y, OPTION_ROW_H)) {
-            addRenderableWidget(Button.builder(Component.translatable(this.placementWireframePreview
-                    ? "config.rtsbuilding.enabled"
-                    : "config.rtsbuilding.disabled"), btn -> {
-                this.placementWireframePreview = !this.placementWireframePreview;
-                rebuildConfigWidgets();
-            }).bounds(controlX, y + 9, controlW, 20).build());
+            this.areaMineMaxVolumeBox = addIntegerBox(controlX, y, controlW,
+                    Component.translatable("config.rtsbuilding.area_mine_max_volume"), this.draftAreaMineMaxVolume, 6);
         }
         y += OPTION_ROW_H;
 
         if (fullyVisible(y, OPTION_ROW_H)) {
-            addRenderableWidget(Button.builder(Component.translatable(this.placeWireframeAnimation
-                    ? "config.rtsbuilding.enabled"
-                    : "config.rtsbuilding.disabled"), btn -> {
-                this.placeWireframeAnimation = !this.placeWireframeAnimation;
-                rebuildConfigWidgets();
-            }).bounds(controlX, y + 9, controlW, 20).build());
+            this.areaDestroyMaxTargetsBox = addIntegerBox(controlX, y, controlW,
+                    Component.translatable("config.rtsbuilding.area_destroy_max_targets"),
+                    this.draftAreaDestroyMaxTargets, 6);
         }
-        y += OPTION_ROW_H;
+    }
 
-        if (fullyVisible(y, OPTION_ROW_H)) {
-            addRenderableWidget(Button.builder(Component.translatable(this.destroyWireframeAnimation
-                    ? "config.rtsbuilding.enabled"
-                    : "config.rtsbuilding.disabled"), btn -> {
-                this.destroyWireframeAnimation = !this.destroyWireframeAnimation;
-                rebuildConfigWidgets();
-            }).bounds(controlX, y + 9, controlW, 20).build());
-        }
-        y += OPTION_ROW_H;
-
-        if (fullyVisible(y, OPTION_ROW_H)) {
-            addRenderableWidget(Button.builder(Component.translatable(this.rangeDestroySkeleton
-                    ? "config.rtsbuilding.enabled"
-                    : "config.rtsbuilding.disabled"), btn -> {
-                this.rangeDestroySkeleton = !this.rangeDestroySkeleton;
-                rebuildConfigWidgets();
-            }).bounds(controlX, y + 9, controlW, 20).build());
-        }
+    private EditBox addIntegerBox(int x, int y, int width, Component label, String value, int maxLength) {
+        EditBox box = new EditBox(this.font, x, y + 10, width, 18, label);
+        box.setMaxLength(maxLength);
+        box.setValue(value);
+        box.setTextColor(0xFFFFFFFF);
+        box.setTextColorUneditable(0xFFB8C7D6);
+        addRenderableWidget(box);
+        return box;
     }
 
     private void addFooterButtons() {
@@ -243,14 +212,13 @@ public final class RtsModConfigScreen extends Screen {
                     this.shareWithTeams,
                     parseMaxRadius(),
                     this.blueprintsEnabled,
-                    parseMaxBlueprintBlocks(),
-                    this.placementBlockGhostPreview,
-                    this.placeBlockGhostAnimation,
-                    this.destroyBlockGhostAnimation,
-                    this.placementWireframePreview,
-                    this.placeWireframeAnimation,
-                    this.destroyWireframeAnimation,
-                    this.rangeDestroySkeleton);
+                    parseMaxBlueprintBlocks());
+            Config.saveAreaMineLimitSettings(
+                    parseAreaMineMaxWidth(),
+                    parseAreaMineMaxHeight(),
+                    parseAreaMineMaxDepth(),
+                    parseAreaMineMaxVolume(),
+                    parseAreaDestroyMaxTargets());
         } catch (RuntimeException ex) {
             if (this.minecraft != null && this.minecraft.player != null) {
                 this.minecraft.player.displayClientMessage(Component.literal("RTSBuilding config save failed: " + ex.getClass().getSimpleName()), false);
@@ -268,21 +236,56 @@ public final class RtsModConfigScreen extends Screen {
         if (this.maxBlueprintBlocksBox != null) {
             this.draftMaxBlueprintBlocks = this.maxBlueprintBlocksBox.getValue();
         }
-    }
-
-    private int parseMaxRadius() {
-        try {
-            return Mth.clamp(Integer.parseInt(this.draftMaxRadius.trim()), 48, 512);
-        } catch (NumberFormatException ignored) {
-            return Config.maxActionRadiusBlocks();
+        if (this.areaMineMaxWidthBox != null) {
+            this.draftAreaMineMaxWidth = this.areaMineMaxWidthBox.getValue();
+        }
+        if (this.areaMineMaxHeightBox != null) {
+            this.draftAreaMineMaxHeight = this.areaMineMaxHeightBox.getValue();
+        }
+        if (this.areaMineMaxDepthBox != null) {
+            this.draftAreaMineMaxDepth = this.areaMineMaxDepthBox.getValue();
+        }
+        if (this.areaMineMaxVolumeBox != null) {
+            this.draftAreaMineMaxVolume = this.areaMineMaxVolumeBox.getValue();
+        }
+        if (this.areaDestroyMaxTargetsBox != null) {
+            this.draftAreaDestroyMaxTargets = this.areaDestroyMaxTargetsBox.getValue();
         }
     }
 
+    private int parseMaxRadius() {
+        return parseClampedInt(this.draftMaxRadius, 48, 512, Config.maxActionRadiusBlocks());
+    }
+
     private int parseMaxBlueprintBlocks() {
+        return parseClampedInt(this.draftMaxBlueprintBlocks, 1, 200000, Config.maxBlueprintBlocks());
+    }
+
+    private int parseAreaMineMaxWidth() {
+        return parseClampedInt(this.draftAreaMineMaxWidth, 1, 256, Config.areaMineMaxWidth());
+    }
+
+    private int parseAreaMineMaxHeight() {
+        return parseClampedInt(this.draftAreaMineMaxHeight, 1, 256, Config.areaMineMaxHeight());
+    }
+
+    private int parseAreaMineMaxDepth() {
+        return parseClampedInt(this.draftAreaMineMaxDepth, 1, 256, Config.areaMineMaxDepth());
+    }
+
+    private int parseAreaMineMaxVolume() {
+        return parseClampedInt(this.draftAreaMineMaxVolume, 1, 262144, Config.areaMineMaxVolume());
+    }
+
+    private int parseAreaDestroyMaxTargets() {
+        return parseClampedInt(this.draftAreaDestroyMaxTargets, 1, 262144, Config.areaDestroyMaxTargets());
+    }
+
+    private int parseClampedInt(String raw, int min, int max, int fallback) {
         try {
-            return Mth.clamp(Integer.parseInt(this.draftMaxBlueprintBlocks.trim()), 1, 200000);
+            return Mth.clamp(Integer.parseInt(raw.trim()), min, max);
         } catch (NumberFormatException ignored) {
-            return Config.maxBlueprintBlocks();
+            return fallback;
         }
     }
 
@@ -312,33 +315,27 @@ public final class RtsModConfigScreen extends Screen {
                 Component.translatable("config.rtsbuilding.max_blueprint_blocks.hint"));
         y += OPTION_ROW_H + 6;
 
-        drawSection(g, x, y, Component.translatable("config.rtsbuilding.section.rendering"));
+        drawSection(g, x, y, Component.translatable("config.rtsbuilding.section.area_mining"));
         y += SECTION_H;
-        drawOptionRow(g, x, y, width, Component.translatable("config.rtsbuilding.option.placement_block_ghost_preview"),
-                Component.translatable("config.rtsbuilding.option.placement_block_ghost_preview.hint"));
+        drawOptionRow(g, x, y, width, Component.translatable("config.rtsbuilding.area_mine_max_width"),
+                Component.translatable("config.rtsbuilding.area_mine_max_width.hint"));
         y += OPTION_ROW_H;
-        drawOptionRow(g, x, y, width, Component.translatable("config.rtsbuilding.option.place_block_ghost_animation"),
-                Component.translatable("config.rtsbuilding.option.place_block_ghost_animation.hint"));
+        drawOptionRow(g, x, y, width, Component.translatable("config.rtsbuilding.area_mine_max_height"),
+                Component.translatable("config.rtsbuilding.area_mine_max_height.hint"));
         y += OPTION_ROW_H;
-        drawOptionRow(g, x, y, width, Component.translatable("config.rtsbuilding.option.destroy_block_ghost_animation"),
-                Component.translatable("config.rtsbuilding.option.destroy_block_ghost_animation.hint"));
+        drawOptionRow(g, x, y, width, Component.translatable("config.rtsbuilding.area_mine_max_depth"),
+                Component.translatable("config.rtsbuilding.area_mine_max_depth.hint"));
         y += OPTION_ROW_H;
-        drawOptionRow(g, x, y, width, Component.translatable("config.rtsbuilding.option.placement_wireframe_preview"),
-                Component.translatable("config.rtsbuilding.option.placement_wireframe_preview.hint"));
+        drawOptionRow(g, x, y, width, Component.translatable("config.rtsbuilding.area_mine_max_volume"),
+                Component.translatable("config.rtsbuilding.area_mine_max_volume.hint"));
         y += OPTION_ROW_H;
-        drawOptionRow(g, x, y, width, Component.translatable("config.rtsbuilding.option.place_wireframe_animation"),
-                Component.translatable("config.rtsbuilding.option.place_wireframe_animation.hint"));
-        y += OPTION_ROW_H;
-        drawOptionRow(g, x, y, width, Component.translatable("config.rtsbuilding.option.destroy_wireframe_animation"),
-                Component.translatable("config.rtsbuilding.option.destroy_wireframe_animation.hint"));
-        y += OPTION_ROW_H;
-        drawOptionRow(g, x, y, width, Component.translatable("config.rtsbuilding.option.range_destroy_skeleton"),
-                Component.translatable("config.rtsbuilding.option.range_destroy_skeleton.hint"));
+        drawOptionRow(g, x, y, width, Component.translatable("config.rtsbuilding.area_destroy_max_targets"),
+                Component.translatable("config.rtsbuilding.area_destroy_max_targets.hint"));
         g.disableScissor();
     }
 
     private int contentHeight() {
-        return SECTION_H * 3 + OPTION_ROW_H * 12 + 12;
+        return SECTION_H * 3 + OPTION_ROW_H * 10 + 12;
     }
 
     private int maxScroll() {

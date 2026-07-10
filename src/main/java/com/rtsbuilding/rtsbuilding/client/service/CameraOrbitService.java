@@ -83,6 +83,10 @@ public final class CameraOrbitService {
 
     private float rotateSensitivity = 5.00F;
     private int inputSensitivityIndex = INPUT_SENS_DEFAULT_INDEX;
+    private int panDragSensitivityIndex = INPUT_SENS_DEFAULT_INDEX;
+    private int rotateViewSensitivityIndex = INPUT_SENS_DEFAULT_INDEX;
+    private int keyboardMoveSensitivityIndex = INPUT_SENS_DEFAULT_INDEX;
+    private int wheelZoomSensitivityIndex = INPUT_SENS_DEFAULT_INDEX;
     private boolean smoothCamera;
     private boolean invertPanDragX;
     private boolean invertPanDragY;
@@ -154,7 +158,6 @@ public final class CameraOrbitService {
         this.lastSmoothCameraFrameNanos = 0L;
         this.cameraMoveHeartbeatTicks = 0;
         this.cameraRestoreCooldownTicks = 0;
-        this.inputSensitivityIndex = INPUT_SENS_DEFAULT_INDEX;
         this.pendingPanX = 0.0F;
         this.pendingPanY = 0.0F;
         this.pendingScroll = 0.0F;
@@ -293,7 +296,7 @@ public final class CameraOrbitService {
     }
 
     public String getInputSensitivityLabel() {
-        return String.format(java.util.Locale.ROOT, "x%.2f", getInputSensitivityScale());
+        return sensitivityLabel(this.rotateViewSensitivityIndex);
     }
 
     public int getInputSensitivityIndex() {
@@ -308,20 +311,108 @@ public final class CameraOrbitService {
     }
 
     public void setInputSensitivityByFraction(double fraction) {
-        double clamped = Mth.clamp(fraction, 0.0D, 1.0D);
-        int next = (int) Math.round(clamped * (INPUT_SENS_PRESETS.length - 1));
-        this.inputSensitivityIndex = Mth.clamp(next, 0, INPUT_SENS_PRESETS.length - 1);
+        int next = sensitivityIndexFromFraction(fraction);
+        this.inputSensitivityIndex = next;
+        this.panDragSensitivityIndex = next;
+        this.rotateViewSensitivityIndex = next;
+        this.keyboardMoveSensitivityIndex = next;
+        this.wheelZoomSensitivityIndex = next;
     }
 
     public void cycleInputSensitivity() {
-        this.inputSensitivityIndex = (this.inputSensitivityIndex + 1) % INPUT_SENS_PRESETS.length;
+        int next = (getInputSensitivityIndex() + 1) % INPUT_SENS_PRESETS.length;
+        this.inputSensitivityIndex = next;
+        this.panDragSensitivityIndex = next;
+        this.rotateViewSensitivityIndex = next;
+        this.keyboardMoveSensitivityIndex = next;
+        this.wheelZoomSensitivityIndex = next;
     }
 
     private float getInputSensitivityScale() {
-        if (this.inputSensitivityIndex < 0 || this.inputSensitivityIndex >= INPUT_SENS_PRESETS.length) {
-            this.inputSensitivityIndex = INPUT_SENS_DEFAULT_INDEX;
-        }
-        return INPUT_SENS_PRESETS[this.inputSensitivityIndex];
+        return getRotateViewSensitivityScale();
+    }
+
+    public String getPanDragSensitivityLabel() {
+        return sensitivityLabel(this.panDragSensitivityIndex);
+    }
+
+    public int getPanDragSensitivityIndex() {
+        this.panDragSensitivityIndex = sanitizeSensitivityIndex(this.panDragSensitivityIndex);
+        return this.panDragSensitivityIndex;
+    }
+
+    public void setPanDragSensitivityByFraction(double fraction) {
+        this.panDragSensitivityIndex = sensitivityIndexFromFraction(fraction);
+    }
+
+    public String getRotateViewSensitivityLabel() {
+        return sensitivityLabel(this.rotateViewSensitivityIndex);
+    }
+
+    public int getRotateViewSensitivityIndex() {
+        this.rotateViewSensitivityIndex = sanitizeSensitivityIndex(this.rotateViewSensitivityIndex);
+        return this.rotateViewSensitivityIndex;
+    }
+
+    public void setRotateViewSensitivityByFraction(double fraction) {
+        this.rotateViewSensitivityIndex = sensitivityIndexFromFraction(fraction);
+        this.inputSensitivityIndex = this.rotateViewSensitivityIndex;
+    }
+
+    public String getKeyboardMoveSensitivityLabel() {
+        return sensitivityLabel(this.keyboardMoveSensitivityIndex);
+    }
+
+    public int getKeyboardMoveSensitivityIndex() {
+        this.keyboardMoveSensitivityIndex = sanitizeSensitivityIndex(this.keyboardMoveSensitivityIndex);
+        return this.keyboardMoveSensitivityIndex;
+    }
+
+    public void setKeyboardMoveSensitivityByFraction(double fraction) {
+        this.keyboardMoveSensitivityIndex = sensitivityIndexFromFraction(fraction);
+    }
+
+    public String getWheelZoomSensitivityLabel() {
+        return sensitivityLabel(this.wheelZoomSensitivityIndex);
+    }
+
+    public int getWheelZoomSensitivityIndex() {
+        this.wheelZoomSensitivityIndex = sanitizeSensitivityIndex(this.wheelZoomSensitivityIndex);
+        return this.wheelZoomSensitivityIndex;
+    }
+
+    public void setWheelZoomSensitivityByFraction(double fraction) {
+        this.wheelZoomSensitivityIndex = sensitivityIndexFromFraction(fraction);
+    }
+
+    private float getPanDragSensitivityScale() {
+        return INPUT_SENS_PRESETS[getPanDragSensitivityIndex()];
+    }
+
+    private float getRotateViewSensitivityScale() {
+        return INPUT_SENS_PRESETS[getRotateViewSensitivityIndex()];
+    }
+
+    private float getKeyboardMoveSensitivityScale() {
+        return INPUT_SENS_PRESETS[getKeyboardMoveSensitivityIndex()];
+    }
+
+    private float getWheelZoomSensitivityScale() {
+        return INPUT_SENS_PRESETS[getWheelZoomSensitivityIndex()];
+    }
+
+    private static String sensitivityLabel(int index) {
+        return String.format(java.util.Locale.ROOT, "x%.2f", INPUT_SENS_PRESETS[sanitizeSensitivityIndex(index)]);
+    }
+
+    private static int sensitivityIndexFromFraction(double fraction) {
+        double clamped = Mth.clamp(fraction, 0.0D, 1.0D);
+        int next = (int) Math.round(clamped * (INPUT_SENS_PRESETS.length - 1));
+        return Mth.clamp(next, 0, INPUT_SENS_PRESETS.length - 1);
+    }
+
+    private static int sanitizeSensitivityIndex(int index) {
+        return Mth.clamp(index, 0, INPUT_SENS_PRESETS.length - 1);
     }
 
     // =========================================================================
@@ -410,8 +501,9 @@ public final class CameraOrbitService {
     public void queuePanDrag(double dragX, double dragY) {
         float signedDragX = (float) dragX;
         float signedDragY = (float) dragY;
-        float panX = this.invertPanDragX ? signedDragX : -signedDragX;
-        float panY = this.invertPanDragY ? signedDragY : -signedDragY;
+        float scale = getPanDragSensitivityScale();
+        float panX = (this.invertPanDragX ? signedDragX : -signedDragX) * scale;
+        float panY = (this.invertPanDragY ? signedDragY : -signedDragY) * scale;
         this.pendingPanX += panX;
         this.pendingPanY += panY;
         if (this.smoothCamera) {
@@ -428,10 +520,11 @@ public final class CameraOrbitService {
     }
 
     public void queueScroll(double scrollY) {
-        this.pendingScroll += (float) scrollY;
+        float scroll = (float) scrollY * getWheelZoomSensitivityScale();
+        this.pendingScroll += scroll;
         if (this.smoothCamera) {
             applyImmediateCameraInput(0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F,
-                    (float) scrollY * getInputSensitivityScale(), 0, false);
+                    scroll, 0, false);
         }
     }
 
@@ -447,7 +540,7 @@ public final class CameraOrbitService {
     // =========================================================================
 
     private void applyImmediateRotation(float dragX, float dragY) {
-        float sens = getInputSensitivityScale() * this.rotateSensitivity;
+        float sens = getRotateViewSensitivityScale() * this.rotateSensitivity;
         float yawDelta = Mth.clamp(dragX, -ROT_INPUT_CLAMP, ROT_INPUT_CLAMP) * sens;
         float pitchDelta = Mth.clamp(dragY, -ROT_INPUT_CLAMP, ROT_INPUT_CLAMP) * sens;
         applyImmediateCameraInput(0.0F, 0.0F, 0.0F, 0.0F, 0.0F, yawDelta, pitchDelta, 0.0F, 0, false);
@@ -487,9 +580,10 @@ public final class CameraOrbitService {
         this.maxRadius = maxRadius;
 
         CameraInput cameraInput = readCameraInput(minecraft);
-        float forward = cameraInput.forward;
-        float strafe = cameraInput.strafe;
-        float vertical = cameraInput.vertical;
+        float keyboardScale = getKeyboardMoveSensitivityScale();
+        float forward = cameraInput.forward * keyboardScale;
+        float strafe = cameraInput.strafe * keyboardScale;
+        float vertical = cameraInput.vertical * keyboardScale;
         boolean fast = cameraInput.fast;
 
         float safeRawX = Mth.clamp(this.pendingRawRotateX, -ROT_INPUT_CLAMP, ROT_INPUT_CLAMP);
@@ -505,10 +599,10 @@ public final class CameraOrbitService {
             this.emaRotateY *= ROT_EMA_DECAY;
         }
 
-        float inputSensScale = getInputSensitivityScale();
-        float rotateXForTick = Mth.clamp(this.emaRotateX * this.rotateSensitivity * inputSensScale, -ROT_INPUT_CLAMP, ROT_INPUT_CLAMP);
-        float rotateYForTick = Mth.clamp(this.emaRotateY * this.rotateSensitivity * inputSensScale, -ROT_INPUT_CLAMP, ROT_INPUT_CLAMP);
-        float scrollForTick = this.pendingScroll * inputSensScale;
+        float rotateSensitivityScale = getRotateViewSensitivityScale();
+        float rotateXForTick = Mth.clamp(this.emaRotateX * this.rotateSensitivity * rotateSensitivityScale, -ROT_INPUT_CLAMP, ROT_INPUT_CLAMP);
+        float rotateYForTick = Mth.clamp(this.emaRotateY * this.rotateSensitivity * rotateSensitivityScale, -ROT_INPUT_CLAMP, ROT_INPUT_CLAMP);
+        float scrollForTick = this.pendingScroll;
         if (Math.abs(rotateXForTick) < CAMERA_INPUT_EPSILON) {
             rotateXForTick = 0.0F;
             this.emaRotateX = 0.0F;
@@ -622,9 +716,9 @@ public final class CameraOrbitService {
         }
 
         applyLocalPrediction(
-                input.forward * tickDelta,
-                input.strafe * tickDelta,
-                input.vertical * tickDelta,
+                input.forward * getKeyboardMoveSensitivityScale() * tickDelta,
+                input.strafe * getKeyboardMoveSensitivityScale() * tickDelta,
+                input.vertical * getKeyboardMoveSensitivityScale() * tickDelta,
                 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0, input.fast);
     }
 
@@ -668,7 +762,7 @@ public final class CameraOrbitService {
         double targetY = this.localY;
         double targetZ = this.localZ;
 
-        float safeVertical = Mth.clamp(vertical, -1.0F, 1.0F);
+        float safeVertical = Mth.clamp(vertical, -4.0F, 4.0F);
         double dx = (-sin * forward + cos * strafe) * speed;
         double dz = (cos * forward + sin * strafe) * speed;
 

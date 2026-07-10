@@ -3,6 +3,7 @@ package com.rtsbuilding.rtsbuilding.client.screen.blueprint;
 import com.rtsbuilding.rtsbuilding.Config;
 import com.rtsbuilding.rtsbuilding.client.bootstrap.ClientKeyMappings;
 import com.rtsbuilding.rtsbuilding.client.controller.ClientRtsController;
+import com.rtsbuilding.rtsbuilding.client.screen.selection.RtsSelectionNudge;
 import com.rtsbuilding.rtsbuilding.common.blueprint.io.BlueprintReaders;
 import com.rtsbuilding.rtsbuilding.common.blueprint.io.BlueprintWriters;
 import com.rtsbuilding.rtsbuilding.common.blueprint.model.RtsBlueprint;
@@ -61,7 +62,6 @@ public final class BlueprintPanel {
     private static int xRotationSteps = 0;
     private static int zRotationSteps = 0;
     private static BlockPos pinnedAnchor = null;
-    private static Direction pinnedNudgeForward = Direction.SOUTH;
     private static final BlueprintCaptureController CAPTURE = new BlueprintCaptureController();
     private static String search = "";
     private static Component statusText = Component.translatable("screen.rtsbuilding.blueprints.status.ready");
@@ -593,11 +593,6 @@ public final class BlueprintPanel {
                 setStatus(S2CBlueprintStatusPayload.INFO, "screen.rtsbuilding.blueprints.status.save_busy", "");
                 return true;
             }
-            int step = org.lwjgl.glfw.GLFW.glfwGetKey(Minecraft.getInstance().getWindow().getWindow(),
-                    org.lwjgl.glfw.GLFW.GLFW_KEY_LEFT_ALT) == org.lwjgl.glfw.GLFW.GLFW_PRESS
-                    || org.lwjgl.glfw.GLFW.glfwGetKey(Minecraft.getInstance().getWindow().getWindow(),
-                            org.lwjgl.glfw.GLFW.GLFW_KEY_RIGHT_ALT) == org.lwjgl.glfw.GLFW.GLFW_PRESS
-                    ? 4 : 1;
             if (cancelKey || keyCode == org.lwjgl.glfw.GLFW.GLFW_KEY_ESCAPE) {
                 if (CAPTURE.releaseActiveHandle()) {
                     return true;
@@ -609,12 +604,9 @@ public final class BlueprintPanel {
                 saveCapturedArea();
                 return true;
             }
-            if (keyCode == org.lwjgl.glfw.GLFW.GLFW_KEY_PAGE_UP) {
-                CAPTURE.moveSelection(0, step, 0, BlueprintPanel::setStatus);
-                return true;
-            }
-            if (keyCode == org.lwjgl.glfw.GLFW.GLFW_KEY_PAGE_DOWN) {
-                CAPTURE.moveSelection(0, -step, 0, BlueprintPanel::setStatus);
+            RtsSelectionNudge.Delta captureDelta = RtsSelectionNudge.fromKey(keyCode, scanCode);
+            if (captureDelta != null && CAPTURE.isSelectionComplete()) {
+                CAPTURE.moveSelection(captureDelta.dx(), captureDelta.dy(), captureDelta.dz(), BlueprintPanel::setStatus);
                 return true;
             }
             return true;
@@ -623,27 +615,9 @@ public final class BlueprintPanel {
             return rotateSelectedBlueprintY(isShiftDown() ? -1 : 1);
         }
         if (hasPinnedPreview()) {
-            if (keyCode == org.lwjgl.glfw.GLFW.GLFW_KEY_KP_4
-                    || keyCode == org.lwjgl.glfw.GLFW.GLFW_KEY_LEFT) {
-                return nudgePinnedAnchorRelative(-1, 0, 0, controller);
-            }
-            if (keyCode == org.lwjgl.glfw.GLFW.GLFW_KEY_KP_6
-                    || keyCode == org.lwjgl.glfw.GLFW.GLFW_KEY_RIGHT) {
-                return nudgePinnedAnchorRelative(1, 0, 0, controller);
-            }
-            if (keyCode == org.lwjgl.glfw.GLFW.GLFW_KEY_KP_8
-                    || keyCode == org.lwjgl.glfw.GLFW.GLFW_KEY_UP) {
-                return nudgePinnedAnchorRelative(0, 1, 0, controller);
-            }
-            if (keyCode == org.lwjgl.glfw.GLFW.GLFW_KEY_KP_2
-                    || keyCode == org.lwjgl.glfw.GLFW.GLFW_KEY_DOWN) {
-                return nudgePinnedAnchorRelative(0, -1, 0, controller);
-            }
-            if (keyCode == org.lwjgl.glfw.GLFW.GLFW_KEY_PAGE_UP) {
-                return nudgePinnedAnchor(0, 1, 0, controller);
-            }
-            if (keyCode == org.lwjgl.glfw.GLFW.GLFW_KEY_PAGE_DOWN) {
-                return nudgePinnedAnchor(0, -1, 0, controller);
+            RtsSelectionNudge.Delta delta = RtsSelectionNudge.fromKey(keyCode, scanCode);
+            if (delta != null) {
+                return nudgePinnedAnchor(delta.dx(), delta.dy(), delta.dz(), controller);
             }
         }
         if (!searchFocused && cancelKey) {
@@ -1009,7 +983,6 @@ public final class BlueprintPanel {
             return false;
         }
         pinnedAnchor = anchor.immutable();
-        pinnedNudgeForward = currentHorizontalFacingDirection();
         setStatus(S2CBlueprintStatusPayload.INFO, "screen.rtsbuilding.blueprints.status.preview_pinned", shortPos(pinnedAnchor));
         return true;
     }
@@ -1207,7 +1180,7 @@ public final class BlueprintPanel {
 
     static boolean nudgePinnedAnchorRelative(int rightSteps, int forwardSteps, int upSteps,
             ClientRtsController controller) {
-        Direction forward = pinnedNudgeForward == null ? currentHorizontalFacingDirection() : pinnedNudgeForward;
+        Direction forward = currentHorizontalFacingDirection();
         Direction right = rightOf(forward);
         int dx = forward.getStepX() * forwardSteps + right.getStepX() * rightSteps;
         int dz = forward.getStepZ() * forwardSteps + right.getStepZ() * rightSteps;
@@ -1901,7 +1874,6 @@ public final class BlueprintPanel {
     static void clearSelectedBlueprint() {
         selectedIndex = -1;
         pinnedAnchor = null;
-        pinnedNudgeForward = Direction.SOUTH;
         yRotationSteps = 0;
         xRotationSteps = 0;
         zRotationSteps = 0;

@@ -65,7 +65,7 @@ public final class RtsClientUiStateStore {
     }
 
     /** 当前数据版本，用于未来兼容性迁移 */
-    static final int CURRENT_STORE_VERSION = 2;
+    static final int CURRENT_STORE_VERSION = 3;
 
     /** 持久化配置文件路径：config/rts_building/rtsbuilding-client-ui.rtsd（二进制编译格式） */
     private static final Path CONFIG_PATH = FMLPaths.CONFIGDIR.get()
@@ -257,6 +257,36 @@ public final class RtsClientUiStateStore {
         CACHE.markDirty();
     }
 
+    /** RTS 客户端音效总开关。 */
+    public static synchronized boolean isRtsSoundsEnabled() {
+        return CACHE.get().sound.rtsSoundsEnabled;
+    }
+
+    public static synchronized void setRtsSoundsEnabled(boolean enabled) {
+        CACHE.get().sound.rtsSoundsEnabled = enabled;
+        CACHE.markDirty();
+    }
+
+    /** 方块破坏音效是否启用；放置音效只受总开关控制。 */
+    public static synchronized boolean isRtsBreakSoundsEnabled() {
+        return CACHE.get().sound.breakSoundsEnabled;
+    }
+
+    public static synchronized void setRtsBreakSoundsEnabled(boolean enabled) {
+        CACHE.get().sound.breakSoundsEnabled = enabled;
+        CACHE.markDirty();
+    }
+
+    /** 客户端每 tick 最多立即播放的 RTS 方块操作音效数。 */
+    public static synchronized int getRtsBlockSoundsPerTick() {
+        return Math.max(1, Math.min(16, CACHE.get().sound.blockSoundsPerTick));
+    }
+
+    public static synchronized void setRtsBlockSoundsPerTick(int value) {
+        CACHE.get().sound.blockSoundsPerTick = Math.max(1, Math.min(16, value));
+        CACHE.markDirty();
+    }
+
     // ======================== UiState 数据类 ========================
 
     /**
@@ -284,6 +314,8 @@ public final class RtsClientUiStateStore {
         public StorageState storage = new StorageState();
         /** 战斗 / 工具面板 */
         public CombatState combat = new CombatState();
+        /** RTS 音效偏好 */
+        public SoundState sound = new SoundState();
         /** 调试面板 */
         public DebugState debug = new DebugState();
         /** 设置菜单 */
@@ -346,12 +378,24 @@ public final class RtsClientUiStateStore {
             public String destroyFillMode = "FILL";
             public int destroyRotationDegrees = 0;
             public boolean destroyLineConnected = false;
+            public boolean advancedRangeDestroySquare = false;
+            public boolean advancedRangeDestroyWall = false;
+            public boolean advancedRangeDestroyCircle = false;
+            public boolean advancedRangeDestroyCylinder = false;
+            public boolean circleVertical = false;
+            public boolean cylinderVertical = false;
+            public boolean advancedRangeDestroyBall = false;
+            public boolean advancedRangeDestroyBox = false;
         }
 
         /** 相机 / 视觉状态。 */
         public static final class CameraState {
             public double rtsGuiScale = 2.0D;
             public int inputSensitivityIndex = 2;
+            public int panDragSensitivityIndex = -1;
+            public int rotateViewSensitivityIndex = -1;
+            public int keyboardMoveSensitivityIndex = -1;
+            public int wheelZoomSensitivityIndex = -1;
             public boolean startCameraAtPlayerHead = false;
             public boolean invertPanDragX = false;
             public boolean invertPanDragY = false;
@@ -379,6 +423,13 @@ public final class RtsClientUiStateStore {
             public boolean toolProtectionEnabled = true;
             public boolean damageSoundEnabled = true;
             public boolean damageAutoReturnEnabled = true;
+        }
+
+        /** RTS 客户端音效状态。 */
+        public static final class SoundState {
+            public boolean rtsSoundsEnabled = true;
+            public boolean breakSoundsEnabled = true;
+            public int blockSoundsPerTick = 8;
         }
 
         /** 调试状态。 */
@@ -442,9 +493,25 @@ public final class RtsClientUiStateStore {
             clean.quickBuild.mining.destroyFillMode = sanitizeEnum(this.quickBuild.mining.destroyFillMode, "FILL");
             clean.quickBuild.mining.destroyRotationDegrees = Math.floorMod(this.quickBuild.mining.destroyRotationDegrees, 360);
             clean.quickBuild.mining.destroyLineConnected = this.quickBuild.mining.destroyLineConnected;
+            clean.quickBuild.mining.advancedRangeDestroySquare = this.quickBuild.mining.advancedRangeDestroySquare;
+            clean.quickBuild.mining.advancedRangeDestroyWall = this.quickBuild.mining.advancedRangeDestroyWall;
+            clean.quickBuild.mining.advancedRangeDestroyCircle = this.quickBuild.mining.advancedRangeDestroyCircle;
+            clean.quickBuild.mining.advancedRangeDestroyCylinder = this.quickBuild.mining.advancedRangeDestroyCylinder;
+            clean.quickBuild.mining.circleVertical = this.quickBuild.mining.circleVertical;
+            clean.quickBuild.mining.cylinderVertical = this.quickBuild.mining.cylinderVertical;
+            clean.quickBuild.mining.advancedRangeDestroyBall = this.quickBuild.mining.advancedRangeDestroyBall;
+            clean.quickBuild.mining.advancedRangeDestroyBox = this.quickBuild.mining.advancedRangeDestroyBox;
             // camera
             clean.camera.rtsGuiScale = sanitizeScale(this.camera.rtsGuiScale);
             clean.camera.inputSensitivityIndex = Math.max(0, Math.min(32, this.camera.inputSensitivityIndex));
+            clean.camera.panDragSensitivityIndex = sanitizeSensitivityIndex(
+                    this.camera.panDragSensitivityIndex, clean.camera.inputSensitivityIndex);
+            clean.camera.rotateViewSensitivityIndex = sanitizeSensitivityIndex(
+                    this.camera.rotateViewSensitivityIndex, clean.camera.inputSensitivityIndex);
+            clean.camera.keyboardMoveSensitivityIndex = sanitizeSensitivityIndex(
+                    this.camera.keyboardMoveSensitivityIndex, clean.camera.inputSensitivityIndex);
+            clean.camera.wheelZoomSensitivityIndex = sanitizeSensitivityIndex(
+                    this.camera.wheelZoomSensitivityIndex, clean.camera.inputSensitivityIndex);
             clean.camera.startCameraAtPlayerHead = this.camera.startCameraAtPlayerHead;
             clean.camera.invertPanDragX = this.camera.invertPanDragX;
             clean.camera.invertPanDragY = this.camera.invertPanDragY;
@@ -463,6 +530,11 @@ public final class RtsClientUiStateStore {
             clean.combat.toolProtectionEnabled = this.combat.toolProtectionEnabled;
             clean.combat.damageSoundEnabled = this.combat.damageSoundEnabled;
             clean.combat.damageAutoReturnEnabled = this.combat.damageAutoReturnEnabled;
+            // sound
+            SoundState sourceSound = this.sound == null ? new SoundState() : this.sound;
+            clean.sound.rtsSoundsEnabled = sourceSound.rtsSoundsEnabled;
+            clean.sound.breakSoundsEnabled = sourceSound.breakSoundsEnabled;
+            clean.sound.blockSoundsPerTick = Math.max(1, Math.min(16, sourceSound.blockSoundsPerTick));
             // debug
             clean.debug.debugButtonVisible = this.debug.debugButtonVisible;
             clean.debug.lineConnected = this.debug.lineConnected;
@@ -535,6 +607,14 @@ public final class RtsClientUiStateStore {
         /**
          * 键列表去重、去除空白、转小写。
          */
+        private static int sanitizeSensitivityIndex(int value, int fallback) {
+            int safeFallback = Math.max(0, Math.min(5, fallback));
+            if (value < 0) {
+                return safeFallback;
+            }
+            return Math.max(0, Math.min(5, value));
+        }
+
         private static List<String> sanitizeKeys(List<String> values) {
             Set<String> unique = new LinkedHashSet<>();
             if (values != null) {

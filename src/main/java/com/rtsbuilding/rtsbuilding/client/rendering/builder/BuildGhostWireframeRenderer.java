@@ -15,7 +15,6 @@ import java.util.List;
  * future positions, not a server-confirmed placement animation.
  */
 public final class BuildGhostWireframeRenderer {
-
     private BuildGhostWireframeRenderer() {
     }
 
@@ -47,7 +46,7 @@ public final class BuildGhostWireframeRenderer {
                     poseStack, lineBuffer,
                     minX, minY, minZ,
                     maxX, maxY, maxZ,
-                    lineR, lineG, lineB, 0.95F);
+                    lineR, lineG, lineB, 0.70F);
         }
     }
 }

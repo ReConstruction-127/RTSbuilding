@@ -21,6 +21,7 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.item.ItemStack;
 import org.lwjgl.glfw.GLFW;
 
+import java.util.Arrays;
 import java.util.List;
 
 import static com.rtsbuilding.rtsbuilding.client.screen.standalone.BuilderScreenConstants.*;
@@ -51,7 +52,7 @@ public final class QuickBuildPanel extends RtsWindowPanel {
     private static final int QUICK_BUILD_PANEL_MIN_H = 222;
 
     /** 底部提示文字区域额外高度 */
-    private static final int BOTTOM_INFO_H = 52;
+    private static final int BOTTOM_INFO_H = 72;
     private static final int BOTTOM_TEXT_MAX_LINES = 3;
 
     /** 选择指示器贴图 */
@@ -148,6 +149,14 @@ public final class QuickBuildPanel extends RtsWindowPanel {
     private AreaMineShape rangeDestroyShape = AreaMineShape.CHAIN;
     private WindowSlider chainLimitSlider;
     private int chainDestroyLimit = 64;
+    private boolean advancedRangeDestroySquare;
+    private boolean advancedRangeDestroyWall;
+    private boolean advancedRangeDestroyCircle;
+    private boolean advancedRangeDestroyCylinder;
+    private boolean advancedRangeDestroyBall;
+    private boolean advancedRangeDestroyBox;
+    private boolean circleVertical;
+    private boolean cylinderVertical;
 
     /** 缓存的形状（BUILD），用于检测 fill mode 是否需要重建 */
     private BuildShape lastFillShape;
@@ -187,6 +196,54 @@ public final class QuickBuildPanel extends RtsWindowPanel {
                     v -> this.rangeDestroyShape = v,
                     AreaMineShape.CHAIN,
                     AreaMineShape.class),
+            PersistableProperty.boolField(
+                    "advanced_range_destroy_square",
+                    state -> state.quickBuild.mining.advancedRangeDestroySquare,
+                    (state, v) -> state.quickBuild.mining.advancedRangeDestroySquare = v,
+                    () -> this.advancedRangeDestroySquare,
+                    v -> this.advancedRangeDestroySquare = v),
+            PersistableProperty.boolField(
+                    "advanced_range_destroy_wall",
+                    state -> state.quickBuild.mining.advancedRangeDestroyWall,
+                    (state, v) -> state.quickBuild.mining.advancedRangeDestroyWall = v,
+                    () -> this.advancedRangeDestroyWall,
+                    v -> this.advancedRangeDestroyWall = v),
+            PersistableProperty.boolField(
+                    "advanced_range_destroy_circle",
+                    state -> state.quickBuild.mining.advancedRangeDestroyCircle,
+                    (state, v) -> state.quickBuild.mining.advancedRangeDestroyCircle = v,
+                    () -> this.advancedRangeDestroyCircle,
+                    v -> this.advancedRangeDestroyCircle = v),
+            PersistableProperty.boolField(
+                    "advanced_range_destroy_cylinder",
+                    state -> state.quickBuild.mining.advancedRangeDestroyCylinder,
+                    (state, v) -> state.quickBuild.mining.advancedRangeDestroyCylinder = v,
+                    () -> this.advancedRangeDestroyCylinder,
+                    v -> this.advancedRangeDestroyCylinder = v),
+            PersistableProperty.boolField(
+                    "round_shape_circle_vertical",
+                    state -> state.quickBuild.mining.circleVertical,
+                    (state, v) -> state.quickBuild.mining.circleVertical = v,
+                    () -> this.circleVertical,
+                    v -> this.circleVertical = v),
+            PersistableProperty.boolField(
+                    "round_shape_cylinder_vertical",
+                    state -> state.quickBuild.mining.cylinderVertical,
+                    (state, v) -> state.quickBuild.mining.cylinderVertical = v,
+                    () -> this.cylinderVertical,
+                    v -> this.cylinderVertical = v),
+            PersistableProperty.boolField(
+                    "advanced_range_destroy_ball",
+                    state -> state.quickBuild.mining.advancedRangeDestroyBall,
+                    (state, v) -> state.quickBuild.mining.advancedRangeDestroyBall = v,
+                    () -> this.advancedRangeDestroyBall,
+                    v -> this.advancedRangeDestroyBall = v),
+            PersistableProperty.boolField(
+                    "advanced_range_destroy_box",
+                    state -> state.quickBuild.mining.advancedRangeDestroyBox,
+                    (state, v) -> state.quickBuild.mining.advancedRangeDestroyBox = v,
+                    () -> this.advancedRangeDestroyBox,
+                    v -> this.advancedRangeDestroyBox = v),
             PersistableProperty.bounds("quick_build", this)
     );
 
@@ -284,6 +341,33 @@ public final class QuickBuildPanel extends RtsWindowPanel {
             });
         } else {
             this.connectToggle = null;
+        }
+        BuildShape orientedShape = activeAdvancedShape();
+        if (supportsVerticalToggle(orientedShape)) {
+            WindowButton[] next = Arrays.copyOf(fillModeButtons, fillModeButtons.length + 1);
+            int verticalIndex = fillModeButtons.length;
+            next[verticalIndex] = new WindowButton(0, 0, 84, 20,
+                    Component.translatable("screen.rtsbuilding.quick_build.vertical"), btn -> {
+                BuildShape shape = activeAdvancedShape();
+                setRoundShapeVertical(shape, !isRoundShapeVertical(shape));
+                screen.clearShapeBuildSession();
+                screen.persistUiState();
+                rebuildFillModeButtons();
+            });
+            fillModeButtons = next;
+        }
+        BuildShape advancedShape = activeAdvancedShape();
+        if (supportsAdvancedShape(advancedShape)) {
+            WindowButton[] next = Arrays.copyOf(fillModeButtons, fillModeButtons.length + 1);
+            int advancedIndex = fillModeButtons.length;
+            next[advancedIndex] = new WindowButton(0, 0, 84, 20,
+                    Component.translatable("screen.rtsbuilding.quick_build.advanced_box"), btn -> {
+                BuildShape shape = activeAdvancedShape();
+                setAdvancedShape(shape, !isAdvancedShape(shape));
+                screen.clearShapeBuildSession();
+                screen.persistUiState();
+            });
+            fillModeButtons = next;
         }
     }
 
@@ -538,9 +622,19 @@ public final class QuickBuildPanel extends RtsWindowPanel {
             fillModeButtons[i].setY(rowY);
             fillModeButtons[i].render(g, mouseX, mouseY, partialTick);
 
-            boolean selected = (isDestroyModeActive()
-                    ? screen.getShapeController().getDestroyShapeFillMode()
-                    : screen.getShapeController().getBuildShapeFillMode()) == modes.get(i);
+            BuildShape advancedShape = activeAdvancedShape();
+            int verticalIndex = verticalButtonIndex(modes);
+            int advancedIndex = advancedButtonIndex(modes);
+            boolean verticalButton = i == verticalIndex;
+            boolean advancedButton = supportsAdvancedShape(advancedShape)
+                    && i == advancedIndex;
+            boolean selected = verticalButton
+                    ? isRoundShapeVertical(advancedShape)
+                    : advancedButton
+                    ? isAdvancedShape(advancedShape)
+                    : i < modes.size() && (isDestroyModeActive()
+                            ? screen.getShapeController().getDestroyShapeFillMode()
+                            : screen.getShapeController().getBuildShapeFillMode()) == modes.get(i);
             boolean hovered = fillModeButtons[i].isHoveredOrFocused();
             int vOffset = selected ? MODE_BUTTON_STATE_H * 2 : (hovered ? MODE_BUTTON_STATE_H : 0);
             RtsTextureRenderer.drawTextureHighPrecision(
@@ -554,7 +648,8 @@ public final class QuickBuildPanel extends RtsWindowPanel {
 
         // --- 连接模式按钮（LINE/WALL 形状时在填充模式下方显示） ---
         if (this.connectToggle != null) {
-            int connectRowY = bodyY + SECTION_TOP + 15 + ((modes.size() + 0) * 38);
+            int connectRowY = bodyY + SECTION_TOP + 15
+                    + ((fillModeButtons == null ? modes.size() : fillModeButtons.length) * 38);
             this.connectToggle.setX(rightX);
             this.connectToggle.setY(connectRowY);
             this.connectToggle.render(g, mouseX, mouseY, partialTick);
@@ -590,12 +685,16 @@ public final class QuickBuildPanel extends RtsWindowPanel {
                     String fullText = workflow.progressText() + "    "
                             + screen.text("screen.rtsbuilding.quick_build.destroy_remaining", workflow.remainingBlocks());
                     g.drawString(screen.font(), fullText, x + 8, textY, 0xFFB8FFB8, false);
+                    renderDimensionInfo(g, x + 8, textY + screen.font().lineHeight + 4, this.windowWidth - 16);
                 } else {
                     String hintKey = isRangeDestroyChainMode()
                             ? "screen.rtsbuilding.quick_build.chain_hint"
-                            : "screen.rtsbuilding.quick_build.destroy_hint";
-                    renderBottomInfoText(g, Component.translatable(hintKey, confirmKeyLabel(true)),
+                            : isAdvancedShapeMode()
+                                    ? "screen.rtsbuilding.quick_build.destroy_advanced_box_hint"
+                                    : "screen.rtsbuilding.quick_build.destroy_hint";
+                    int nextY = renderBottomInfoText(g, Component.translatable(hintKey, confirmKeyLabel(true)),
                             x + 8, textY, this.windowWidth - 16, 0xFFB8B8);
+                    renderDimensionInfo(g, x + 8, nextY + 3, this.windowWidth - 16);
                 }
                 return;
             }
@@ -639,21 +738,31 @@ public final class QuickBuildPanel extends RtsWindowPanel {
                     }
                 }
             }
-            renderBottomInfoText(g,
-                    Component.translatable("screen.rtsbuilding.quick_build.build_hint", confirmKeyLabel(false)),
+            int nextY = renderBottomInfoText(g,
+                    Component.translatable("screen.rtsbuilding.quick_build.build_hint"),
                     x + 8,
                     textY + screen.font().lineHeight + 3,
                     this.windowWidth - 16,
                     0xFFD8E8FF);
+            renderDimensionInfo(g, x + 8, nextY + 3, this.windowWidth - 16);
         }
     }
 
-    private void renderBottomInfoText(GuiGraphics g, Component text, int x, int y, int maxWidth, int color) {
+    private int renderBottomInfoText(GuiGraphics g, Component text, int x, int y, int maxWidth, int color) {
         List<FormattedCharSequence> lines = screen.font().split(text, Math.max(1, maxWidth));
         int lineCount = Math.min(BOTTOM_TEXT_MAX_LINES, lines.size());
         for (int i = 0; i < lineCount; i++) {
             g.drawString(screen.font(), lines.get(i), x, y + i * screen.font().lineHeight, color, false);
         }
+        return y + lineCount * screen.font().lineHeight;
+    }
+
+    private void renderDimensionInfo(GuiGraphics g, int x, int y, int maxWidth) {
+        Component text = Component.translatable(
+                "screen.rtsbuilding.quick_build.dimensions",
+                screen.currentShapeSizeText());
+        String trimmed = screen.font().plainSubstrByWidth(text.getString(), Math.max(1, maxWidth));
+        g.drawString(screen.font(), trimmed, x, y, 0xFFC9D8E8, false);
     }
 
     private String confirmKeyLabel(boolean destroyMode) {
@@ -832,6 +941,85 @@ public final class QuickBuildPanel extends RtsWindowPanel {
 
     public boolean isRangeDestroyChainMode() {
         return isRangeDestroyMode() && this.rangeDestroyShape == AreaMineShape.CHAIN;
+    }
+
+    public boolean isAdvancedRangeDestroyBoxMode() {
+        return isAdvancedShapeMode();
+    }
+
+    public boolean isAdvancedRangeDestroyShapeMode() {
+        return isRangeDestroyMode() && isAdvancedShapeMode();
+    }
+
+    public boolean isAdvancedShapeMode() {
+        BuildShape shape = activeAdvancedShape();
+        return supportsAdvancedShape(shape) && isAdvancedShape(shape);
+    }
+
+    private BuildShape activeAdvancedShape() {
+        return isDestroyModeActive() ? toBuildShape(this.rangeDestroyShape) : this.buildModeShape;
+    }
+
+    private static boolean supportsAdvancedShape(BuildShape shape) {
+        return switch (shape == null ? BuildShape.BLOCK : shape) {
+            case SQUARE, WALL, CIRCLE, CYLINDER, BALL, BOX -> true;
+            case BLOCK, LINE -> false;
+        };
+    }
+
+    private static boolean supportsVerticalToggle(BuildShape shape) {
+        return shape == BuildShape.CIRCLE || shape == BuildShape.CYLINDER;
+    }
+
+    private int verticalButtonIndex(List<ShapeFillMode> modes) {
+        return supportsVerticalToggle(activeAdvancedShape()) ? modes.size() : -1;
+    }
+
+    private int advancedButtonIndex(List<ShapeFillMode> modes) {
+        if (!supportsAdvancedShape(activeAdvancedShape())) {
+            return -1;
+        }
+        return modes.size() + (supportsVerticalToggle(activeAdvancedShape()) ? 1 : 0);
+    }
+
+    private boolean isAdvancedShape(BuildShape shape) {
+        return switch (shape == null ? BuildShape.BLOCK : shape) {
+            case SQUARE -> this.advancedRangeDestroySquare;
+            case WALL -> this.advancedRangeDestroyWall;
+            case CIRCLE -> this.advancedRangeDestroyCircle;
+            case CYLINDER -> this.advancedRangeDestroyCylinder;
+            case BALL -> this.advancedRangeDestroyBall;
+            case BOX -> this.advancedRangeDestroyBox;
+            case BLOCK, LINE -> false;
+        };
+    }
+
+    private void setAdvancedShape(BuildShape shape, boolean value) {
+        switch (shape == null ? BuildShape.BLOCK : shape) {
+            case SQUARE -> this.advancedRangeDestroySquare = value;
+            case WALL -> this.advancedRangeDestroyWall = value;
+            case CIRCLE -> this.advancedRangeDestroyCircle = value;
+            case CYLINDER -> this.advancedRangeDestroyCylinder = value;
+            case BALL -> this.advancedRangeDestroyBall = value;
+            case BOX -> this.advancedRangeDestroyBox = value;
+            case BLOCK, LINE -> {}
+        }
+    }
+
+    public boolean isRoundShapeVertical(BuildShape shape) {
+        return switch (shape == null ? BuildShape.BLOCK : shape) {
+            case CIRCLE -> this.circleVertical;
+            case CYLINDER -> this.cylinderVertical;
+            default -> false;
+        };
+    }
+
+    private void setRoundShapeVertical(BuildShape shape, boolean value) {
+        switch (shape == null ? BuildShape.BLOCK : shape) {
+            case CIRCLE -> this.circleVertical = value;
+            case CYLINDER -> this.cylinderVertical = value;
+            default -> {}
+        }
     }
 
     public static AreaMineShape toAreaMineShape(BuildShape shape) {

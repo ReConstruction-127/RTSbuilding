@@ -34,6 +34,7 @@ import com.rtsbuilding.rtsbuilding.client.screen.panel.RtsFloatingWindowLayer;
 import com.rtsbuilding.rtsbuilding.client.screen.quickbuild.BuildShape;
 import com.rtsbuilding.rtsbuilding.client.screen.quickbuild.QuickBuildMode;
 import com.rtsbuilding.rtsbuilding.client.screen.quickbuild.QuickBuildPanel;
+import com.rtsbuilding.rtsbuilding.client.screen.selection.RtsSelectionNudge;
 import com.rtsbuilding.rtsbuilding.client.screen.shape.ShapeDataRecords;
 import com.rtsbuilding.rtsbuilding.client.screen.shape.ShapeGeometryUtil;
 import com.rtsbuilding.rtsbuilding.client.screen.storage.LinkedStoragePanel;
@@ -159,8 +160,6 @@ public final class BuilderScreen extends Screen {
     private final RtsResumePlacementPanel resumePlacementPanel = new RtsResumePlacementPanel();
     /** Panel for reviewing and resuming suspended blueprint placement jobs. */
     private final RtsBlueprintResumePanel blueprintResumePanel = new RtsBlueprintResumePanel();
-    /** Whether the user is currently dragging the input sensitivity slider. */
-    private boolean draggingInputSensitivity = false;
     /** Whether the funnel hotkey (quick-activate funnel mode) is currently held down. */
     private boolean funnelHotkeyHeld = false;
     /** The builder mode that was active before the funnel hotkey was pressed, for restoration on release. */
@@ -284,10 +283,6 @@ public final class BuilderScreen extends Screen {
     public void toggleStorageRefreshQuietEnabled() { this.uiStateManager.toggleStorageRefreshQuietEnabled(); }
     /** 切换自动刷新。 */
     public void toggleStorageAutoRefreshEnabled() { this.uiStateManager.toggleStorageAutoRefreshEnabled(); }
-    /** Returns whether the user is currently dragging the input sensitivity slider. */
-    public boolean isDraggingInputSensitivity() {
-        return this.draggingInputSensitivity;
-    }
     /** Returns the current shape fill mode (e.g. FILL, HOLLOW, WIREFRAME). Delegates to the shape controller. */
     public ShapeFillMode getShapeFillMode() {
         return this.shapeController.getShapeFillMode();
@@ -648,6 +643,9 @@ public final class BuilderScreen extends Screen {
      * and pan/pick mouse actions.
      */
     private boolean handleWorldClickActions(double mouseX, double mouseY, int button) {
+        if (handleAdvancedShapeHandleClick(mouseX, mouseY, button)) {
+            return true;
+        }
         if (handleBatchConfirmMouse(mouseX, mouseY, button)) {
             return true;
         }
@@ -702,6 +700,18 @@ public final class BuilderScreen extends Screen {
         return false;
     }
 
+    private boolean handleAdvancedShapeHandleClick(double mouseX, double mouseY, int button) {
+        if (button != GLFW.GLFW_MOUSE_BUTTON_LEFT
+                || !isAdvancedShapeMode()
+                || !isWorldArea(mouseX, mouseY)
+                || isMouseOverFloatingWindow(mouseX, mouseY)) {
+            return false;
+        }
+        return this.shapeController.clickAdvancedRangeDestroyHandle(
+                this.cursorPicker.currentRayOrigin(),
+                this.cursorPicker.computeCursorRayDirection());
+    }
+
     private boolean handleBatchConfirmMouse(double mouseX, double mouseY, int button) {
         if (!Config.isKeyboardBatchConfirmEnabled() || !isWorldArea(mouseX, mouseY) || isSearchFocused()) {
             return false;
@@ -739,10 +749,6 @@ public final class BuilderScreen extends Screen {
             this.cameraInput.stopActiveMining();
             return true;
         }
-        if (this.draggingInputSensitivity) {
-            this.draggingInputSensitivity = false;
-            return true;
-        }
         if (handleFloatingWindowRelease(mouseX, mouseY, button)) {
             return true;
         }
@@ -753,6 +759,10 @@ public final class BuilderScreen extends Screen {
         if (button == GLFW.GLFW_MOUSE_BUTTON_LEFT
                 && this.cullingManager.isManagementMode()
                 && this.cullingManager.releaseActiveHandleIfDragged()) {
+            return true;
+        }
+        if (button == GLFW.GLFW_MOUSE_BUTTON_LEFT
+                && this.shapeController.releaseAdvancedRangeDestroyHandleIfDragged()) {
             return true;
         }
         if (this.cameraInput.isRightDragActive(button)) {
@@ -781,10 +791,6 @@ public final class BuilderScreen extends Screen {
             }
         }
         endFixedRtsScaleInput(frame);
-        if (this.draggingInputSensitivity) {
-            this.cameraInput.updateInputSensitivityFromMouse(mouseX);
-            return true;
-        }
         if (handleFloatingWindowDrag(mouseX, mouseY, button, dragX, dragY)) {
             return true;
         }
@@ -912,6 +918,14 @@ public final class BuilderScreen extends Screen {
         }
         boolean forcePlace = hasShiftDown();
         boolean rangeDestroyMode = isQuickBuildRangeDestroyMode();
+        if ((mouseButton == GLFW.GLFW_MOUSE_BUTTON_LEFT || mouseButton < 0)
+                && !rangeDestroyMode
+                && isAdvancedShapeMode()
+                && this.shapeController.clickAdvancedRangeDestroyHandle(
+                        this.cursorPicker.currentRayOrigin(),
+                        this.cursorPicker.computeCursorRayDirection())) {
+            return true;
+        }
         if (!rangeDestroyMode && this.shapeController.isAwaitingBatchPlaceConfirm()) {
             if (Config.isKeyboardBatchConfirmEnabled()) {
                 return true;
@@ -1110,6 +1124,10 @@ public final class BuilderScreen extends Screen {
                 && this.cullingManager.handleScroll(scrollY, isAltDown())) {
             return true;
         }
+        if (this.shapeController.advancedRangeDestroyActiveHandle() != null
+                && this.shapeController.scrollAdvancedRangeDestroyHandle(scrollY, isAltDown())) {
+            return true;
+        }
         if (isInsideBottomPanel(mouseX, mouseY)) {
             return this.bottomPanel.handleMouseScrolled(mouseX, mouseY, scrollY);
         }
@@ -1148,6 +1166,7 @@ public final class BuilderScreen extends Screen {
         if (handleOverlayKeys(keyCode, scanCode, modifiers)) return true;
         if (handleBlueprintKeys(keyCode, scanCode, modifiers)) return true;
         if (handleHomeSelectionKey(keyCode)) return true;
+        if (handleSelectionBoxKeys(keyCode, scanCode, modifiers)) return true;
         if (handleWorldInteractionKeys(keyCode, scanCode, modifiers)) return true;
         if (handleSearchFocusKeys(keyCode, scanCode, modifiers)) return true;
         if (handleToolSlotKeys(keyCode, scanCode, modifiers)) return true;
@@ -1158,6 +1177,9 @@ public final class BuilderScreen extends Screen {
     /** Dispatches key to blueprint capture mode and blueprint panel. */
     private boolean handleBlueprintKeys(int keyCode, int scanCode, int modifiers) {
         if (BlueprintPanel.isCaptureModeActive() && BlueprintPanel.keyPressed(keyCode, scanCode, this.controller)) {
+            return true;
+        }
+        if (BlueprintPanel.isPlacementSessionActive() && BlueprintPanel.keyPressed(keyCode, scanCode, this.controller)) {
             return true;
         }
         if (this.bottomPanel.bottomPanelTab == BottomPanelLayoutTypes.BottomPanelTab.BLUEPRINTS
@@ -1270,6 +1292,27 @@ public final class BuilderScreen extends Screen {
                 && !hasControlDown()) {
             persistUiState();
             this.controller.openCraftTerminal();
+            return true;
+        }
+        return false;
+    }
+
+    private boolean handleSelectionBoxKeys(int keyCode, int scanCode, int modifiers) {
+        if (isSearchFocused()) {
+            return false;
+        }
+        if (this.cullingManager.isManagementMode() && this.cullingManager.handleKey(keyCode, scanCode, modifiers)) {
+            return true;
+        }
+        RtsSelectionNudge.Delta delta = RtsSelectionNudge.fromKey(keyCode, scanCode);
+        if (delta == null) {
+            return false;
+        }
+        if (this.cullingManager.isManagementMode()) {
+            this.cullingManager.nudgeSelectedBox(delta.dx(), delta.dy(), delta.dz());
+            return true;
+        }
+        if (this.shapeController.nudgeCurrentShapeSelection(delta.dx(), delta.dy(), delta.dz())) {
             return true;
         }
         return false;
@@ -1776,6 +1819,23 @@ public final class BuilderScreen extends Screen {
     public boolean isQuickBuildRangeDestroyChainMode() {
         return isQuickBuildOpen() && this.quickBuildPanel.isRangeDestroyChainMode();
     }
+    /** 范围破坏的体形状是否正在使用六向手柄高级编辑。 */
+    public boolean isAdvancedRangeDestroyBoxMode() {
+        return isAdvancedShapeMode();
+    }
+
+    public boolean isAdvancedRangeDestroyShapeMode() {
+        return isQuickBuildOpen() && this.quickBuildPanel.isAdvancedRangeDestroyShapeMode();
+    }
+
+    public boolean isAdvancedShapeMode() {
+        return isQuickBuildOpen() && this.quickBuildPanel.isAdvancedShapeMode();
+    }
+
+    public boolean isRoundShapeVertical(BuildShape shape) {
+        return isQuickBuildOpen() && this.quickBuildPanel.isRoundShapeVertical(shape);
+    }
+
     /** Player-facing shape label for the top status row. */
     public String activeQuickBuildShapeLabel() {
         if (isQuickBuildRangeDestroyChainMode()) {
@@ -1787,6 +1847,12 @@ public final class BuilderScreen extends Screen {
     public boolean handleQuickBuildRangeDestroyClick(double mouseX, double mouseY) {
         if (!isQuickBuildRangeDestroyMode() || isQuickBuildRangeDestroyChainMode() || !isWorldArea(mouseX, mouseY)) {
             return false;
+        }
+        if (isAdvancedShapeMode()
+                && this.shapeController.clickAdvancedRangeDestroyHandle(
+                        this.cursorPicker.currentRayOrigin(),
+                        this.cursorPicker.computeCursorRayDirection())) {
+            return true;
         }
         if (this.shapeController.isAwaitingBatchDestroyConfirm()) {
             if (Config.isKeyboardBatchConfirmEnabled()) {
@@ -2000,6 +2066,11 @@ public final class BuilderScreen extends Screen {
             double[] axis = screenAxisForDirection(cullingDirection);
             return this.cullingManager.handleActiveHandleDrag(dragX, dragY, axis[0], axis[1]);
         }
+        Direction advancedBoxDirection = this.shapeController.advancedRangeDestroyActiveHandle();
+        if (advancedBoxDirection != null) {
+            double[] axis = screenAxisForDirection(advancedBoxDirection);
+            return this.shapeController.dragAdvancedRangeDestroyHandle(dragX, dragY, axis[0], axis[1]);
+        }
         return false;
     }
 
@@ -2030,15 +2101,26 @@ public final class BuilderScreen extends Screen {
     private void updateRangeCullingHover(double mouseX, double mouseY) {
         if (!this.cullingManager.isManagementMode()) {
             this.cullingManager.updateHover(null, null);
-            return;
-        }
-        if (!isWorldArea(mouseX, mouseY) || isMouseOverFloatingWindow(mouseX, mouseY)) {
+        } else if (!isWorldArea(mouseX, mouseY) || isMouseOverFloatingWindow(mouseX, mouseY)) {
             this.cullingManager.updateHover(null, null);
+        } else {
+            this.cullingManager.updateHover(
+                    this.cursorPicker.currentRayOrigin(),
+                    this.cursorPicker.computeCursorRayDirection());
+        }
+        updateAdvancedRangeDestroyHover(mouseX, mouseY);
+    }
+
+    private void updateAdvancedRangeDestroyHover(double mouseX, double mouseY) {
+        if (!isAdvancedShapeMode()) {
+            this.shapeController.updateAdvancedRangeDestroyHover(null, null, false);
             return;
         }
-        this.cullingManager.updateHover(
-                this.cursorPicker.currentRayOrigin(),
-                this.cursorPicker.computeCursorRayDirection());
+        boolean enabled = isWorldArea(mouseX, mouseY) && !isMouseOverFloatingWindow(mouseX, mouseY);
+        this.shapeController.updateAdvancedRangeDestroyHover(
+                enabled ? this.cursorPicker.currentRayOrigin() : null,
+                enabled ? this.cursorPicker.computeCursorRayDirection() : null,
+                enabled);
     }
 
     public boolean isBlueprintPlacementModeLocked() {

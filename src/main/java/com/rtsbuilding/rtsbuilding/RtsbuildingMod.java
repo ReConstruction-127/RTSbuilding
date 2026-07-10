@@ -15,6 +15,7 @@ import com.rtsbuilding.rtsbuilding.server.pipeline.core.RtsPipelineRegistration;
 import com.rtsbuilding.rtsbuilding.server.plugin.RtsPluginService;
 import com.rtsbuilding.rtsbuilding.server.progression.RtsProgressionManager;
 import com.rtsbuilding.rtsbuilding.server.service.*;
+import com.rtsbuilding.rtsbuilding.server.service.placement.RtsPlacementSound;
 import com.rtsbuilding.rtsbuilding.server.workflow.core.RtsWorkflowEngine;
 
 import net.minecraft.server.level.ServerPlayer;
@@ -247,6 +248,8 @@ public class RtsbuildingMod {
                 RtsProgressionManager.onPlayerLogout(serverPlayer);
                 // 清除挂起放置的扫描缓存，防止过期数据混淆
                 RtsPendingPlacementService.clearPlayerScanCache(serverPlayer.getUUID());
+                // 清除尚未发送的 RTS 方块音效
+                RtsPlacementSound.forgetPlayer(serverPlayer.getUUID());
                 // 清除进度刷新缓存
                 RtsProgressRefresher.clearPlayerCache(serverPlayer.getUUID());
                 // 同步相关玩家持久化数据

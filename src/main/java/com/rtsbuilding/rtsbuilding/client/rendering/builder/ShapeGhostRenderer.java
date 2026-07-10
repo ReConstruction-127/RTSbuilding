@@ -9,6 +9,7 @@ import com.rtsbuilding.rtsbuilding.client.screen.standalone.BuilderScreen;
 import com.rtsbuilding.rtsbuilding.server.workflow.model.RtsWorkflowStatus;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.phys.AABB;
 
 import java.util.List;
 
@@ -63,11 +64,17 @@ public final class ShapeGhostRenderer {
         boolean sawConfirmedDestructiveWorkArea = false;
         for (ShapeDataRecords.GhostPreview preview : screen.getConfirmedRangeDestroyPreviews()) {
             sawConfirmedDestructiveWorkArea |= isConfirmedDestructiveWorkArea(preview);
-            renderGhostPreview(minecraft, preview, poseStack, lineBuffer, fillBuffer);
+            renderGhostPreview(minecraft, preview, poseStack, lineBuffer, fillBuffer, null);
         }
         ShapeDataRecords.GhostPreview currentPreview = screen.getShapeGhostPreview();
         sawConfirmedDestructiveWorkArea |= isConfirmedDestructiveWorkArea(currentPreview);
-        renderGhostPreview(minecraft, currentPreview, poseStack, lineBuffer, fillBuffer);
+        renderGhostPreview(
+                minecraft,
+                currentPreview,
+                poseStack,
+                lineBuffer,
+                fillBuffer,
+                screen.getShapeController().shapeSelectionRenderAabb());
         if (!sawConfirmedDestructiveWorkArea) {
             MergedSkeletonRenderer.clearCache();
         }
@@ -84,7 +91,7 @@ public final class ShapeGhostRenderer {
     // ===== Ghost preview dispatch =====
 
     private static void renderGhostPreview(Minecraft minecraft, ShapeDataRecords.GhostPreview preview, PoseStack poseStack,
-            VertexConsumer lineBuffer, VertexConsumer fillBuffer) {
+            VertexConsumer lineBuffer, VertexConsumer fillBuffer, AABB selectionAabb) {
         if (preview == null) return;
 
         // Clip preview blocks to the RTS boundary; blocks outside the boundary are not rendered
@@ -132,7 +139,8 @@ public final class ShapeGhostRenderer {
         // ── Destructive (range-destroy) ghost ──
         if (preview.destructive()) {
             float progress = preview.confirmedWorkArea() ? smoothedDestroyProgress(ClientRtsController.get(), preview) : 0.0F;
-            DestructiveGhostRenderer.render(preview, poseStack, lineBuffer, fillBuffer, progress, 1.0F);
+            DestructiveGhostRenderer.render(
+                    preview, poseStack, lineBuffer, fillBuffer, progress, 1.0F, selectionAabb);
             return;
         }
 
@@ -145,7 +153,23 @@ public final class ShapeGhostRenderer {
                         : true);
         BuildGhostRenderer.render(minecraft, preview, poseStack, lineBuffer, fillBuffer,
                 renderBlockGhost,
+                shouldRenderPlacementWireframe(preview));
+    }
+
+    static boolean shouldRenderPlacementWireframe(ShapeDataRecords.GhostPreview preview) {
+        return shouldRenderPlacementWireframe(
+                preview,
                 com.rtsbuilding.rtsbuilding.Config.isPlacementWireframePreviewEnabled());
+    }
+
+    static boolean shouldRenderPlacementWireframe(ShapeDataRecords.GhostPreview preview, boolean configEnabled) {
+        if (preview == null || preview.blocks().isEmpty()) {
+            return false;
+        }
+        if (preview.blocks().size() > 1) {
+            return true;
+        }
+        return configEnabled;
     }
 
     // ===== Range-destroy confirmed work area handling =====

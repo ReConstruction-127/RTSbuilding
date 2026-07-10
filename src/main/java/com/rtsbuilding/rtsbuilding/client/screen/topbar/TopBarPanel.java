@@ -96,19 +96,12 @@ public final class TopBarPanel {
                 : screen.text("screen.rtsbuilding.status.storage_not_linked");
         String row1 = modeText;
 
-        // ---- Status bar row 2: storage, auto-store, fill, rotation, undo ----
+        // ---- Status bar row 2: storage, auto-store, funnel, active workflow hint ----
         String shapeStatus = screen.isQuickBuildOpen() ? screen.pendingShapeStatusText() : "";
-        String quickBuildStatus = screen.canUseQuickBuild()
-                ? "    " + screen.text("screen.rtsbuilding.status.shape", screen.activeQuickBuildShapeLabel())
-                + "    " + screen.text("screen.rtsbuilding.status.fill", screen.fillModeLabel(screen.getShapeFillMode()))
-                + "    " + screen.text("screen.rtsbuilding.status.rotation", screen.getShapeRotateDegrees())
-                + "    " + screen.text("screen.rtsbuilding.status.undo", screen.getShapeUndoSize())
-                : "";
         String row2 = linked + (this.controller.isAutoStoreMinedDrops()
                 ? "    " + screen.text("screen.rtsbuilding.status.auto_store_on")
                 : "    " + screen.text("screen.rtsbuilding.status.auto_store_off"))
                 + "    " + screen.text("screen.rtsbuilding.status.funnel", screen.text(this.controller.isFunnelEnabled() ? "gui.rtsbuilding.on" : "gui.rtsbuilding.off"))
-                + quickBuildStatus
                 + (shapeStatus.isBlank() ? "" : "    " + shapeStatus)
                 + (screen.getPendingGuiBindSlot() >= 0 ? "    " + screen.text("screen.rtsbuilding.status.gui_bind_armed", screen.getPendingGuiBindSlot() + 1) : "");
 

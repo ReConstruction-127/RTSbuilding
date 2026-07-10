@@ -1,6 +1,7 @@
 package com.rtsbuilding.rtsbuilding.client.screen.shape;
 
 import com.rtsbuilding.rtsbuilding.client.screen.quickbuild.BuildShape;
+import com.rtsbuilding.rtsbuilding.client.screen.culling.RtsCullingBox;
 import com.rtsbuilding.rtsbuilding.client.screen.standalone.BuilderScreenConstants;
 import com.rtsbuilding.rtsbuilding.common.shape.model.ShapeFillMode;
 import net.minecraft.core.BlockPos;
@@ -44,6 +45,34 @@ public final class ShapeGeometryUtil {
             default -> targets.add(start);
         }
         return new ArrayList<>(targets);
+    }
+
+    public static List<BlockPos> buildAdvancedShapePositions(BuildShape shape, RtsCullingBox box,
+            ShapeFillMode fillMode) {
+        return buildAdvancedShapePositions(shape, box, fillMode, Direction.UP);
+    }
+
+    public static List<BlockPos> buildAdvancedShapePositions(BuildShape shape, RtsCullingBox box,
+            ShapeFillMode fillMode, Direction planeFace) {
+        if (shape == null || box == null) {
+            return List.of();
+        }
+        LinkedHashSet<BlockPos> targets = new LinkedHashSet<>();
+        switch (shape) {
+            case SQUARE -> addAdvancedSquareTargets(targets, box, fillMode);
+            case WALL -> addAdvancedWallTargets(targets, box, fillMode);
+            case CIRCLE -> addAdvancedEllipseTargets(targets, box, fillMode, planeFace);
+            case CYLINDER -> addAdvancedEllipticCylinderTargets(targets, box, fillMode, planeFace);
+            case BALL -> addAdvancedEllipsoidTargets(targets, box, fillMode);
+            case BOX -> addAdvancedBoxLikeTargets(targets, box, fillMode);
+            default -> {}
+        }
+        return new ArrayList<>(targets);
+    }
+
+    public static List<BlockPos> buildAdvancedRangeDestroyShapePositions(BuildShape shape, RtsCullingBox box,
+            ShapeFillMode fillMode) {
+        return buildAdvancedShapePositions(shape, box, fillMode);
     }
 
     // ======================== 单个形状算法 ========================
@@ -255,6 +284,7 @@ public final class ShapeGeometryUtil {
     public static void addCylinderTargets(Set<BlockPos> targets, BlockPos start, BlockPos end, int heightOffset,
             Direction face, ShapeFillMode fillMode) {
         Direction[] axes = resolveShapePlaneAxes(BuildShape.CYLINDER, face);
+        Direction normal = normalizePlaneFace(face);
         int dx = end.getX() - start.getX();
         int dy = end.getY() - start.getY();
         int dz = end.getZ() - start.getZ();
@@ -273,9 +303,10 @@ public final class ShapeGeometryUtil {
         for (int iy = minY; iy <= maxY; iy++) {
             boolean capLayer = iy == minY || iy == maxY;
             List<BlockPos> layerPositions = new ArrayList<>();
+            BlockPos layerOrigin = offsetAlong(start, normal, iy);
             for (PlaneCell cell : filledBase) {
                 if (fill || (!singleLayer && capLayer) || shellBase.contains(cell)) {
-                    layerPositions.add(offsetPos(start.above(iy), axes[0], cell.a(), axes[1], cell.b()));
+                    layerPositions.add(offsetPos(layerOrigin, axes[0], cell.a(), axes[1], cell.b()));
                 }
             }
             layerPositions.sort(Comparator.comparingDouble(pos -> pos.distSqr(start)));
@@ -565,6 +596,165 @@ public final class ShapeGeometryUtil {
     // ======================== 坐标/向量工具 ========================
 
     /** 限制形状偏移值 */
+    private static void addAdvancedSquareTargets(Set<BlockPos> targets, RtsCullingBox box, ShapeFillMode fillMode) {
+        int y = box.min().getY();
+        for (int x = box.min().getX(); x <= box.max().getX(); x++) {
+            for (int z = box.min().getZ(); z <= box.max().getZ(); z++) {
+                boolean boundary = x == box.min().getX() || x == box.max().getX()
+                        || z == box.min().getZ() || z == box.max().getZ();
+                if (fillMode == ShapeFillMode.FILL || boundary) {
+                    targets.add(new BlockPos(x, y, z));
+                }
+            }
+        }
+    }
+
+    private static void addAdvancedBoxLikeTargets(Set<BlockPos> targets, RtsCullingBox box, ShapeFillMode fillMode) {
+        for (int y = box.min().getY(); y <= box.max().getY(); y++) {
+            for (int x = box.min().getX(); x <= box.max().getX(); x++) {
+                for (int z = box.min().getZ(); z <= box.max().getZ(); z++) {
+                    int boundaryAxes = 0;
+                    if (x == box.min().getX() || x == box.max().getX()) boundaryAxes++;
+                    if (y == box.min().getY() || y == box.max().getY()) boundaryAxes++;
+                    if (z == box.min().getZ() || z == box.max().getZ()) boundaryAxes++;
+                    if (fillMode == ShapeFillMode.FILL
+                            || (fillMode == ShapeFillMode.HOLLOW && boundaryAxes >= 1)
+                            || (fillMode == ShapeFillMode.SKELETON && boundaryAxes >= 2)) {
+                        targets.add(new BlockPos(x, y, z));
+                    }
+                }
+            }
+        }
+    }
+
+    private static void addAdvancedWallTargets(Set<BlockPos> targets, RtsCullingBox box, ShapeFillMode fillMode) {
+        boolean useX = box.width() >= box.depth();
+        int fixedX = box.min().getX();
+        int fixedZ = box.min().getZ();
+        if (useX) {
+            for (int y = box.min().getY(); y <= box.max().getY(); y++) {
+                for (int x = box.min().getX(); x <= box.max().getX(); x++) {
+                    boolean boundary = y == box.min().getY() || y == box.max().getY()
+                            || x == box.min().getX() || x == box.max().getX();
+                    if (fillMode == ShapeFillMode.FILL || boundary) {
+                        targets.add(new BlockPos(x, y, fixedZ));
+                    }
+                }
+            }
+            return;
+        }
+        for (int y = box.min().getY(); y <= box.max().getY(); y++) {
+            for (int z = box.min().getZ(); z <= box.max().getZ(); z++) {
+                boolean boundary = y == box.min().getY() || y == box.max().getY()
+                        || z == box.min().getZ() || z == box.max().getZ();
+                if (fillMode == ShapeFillMode.FILL || boundary) {
+                    targets.add(new BlockPos(fixedX, y, z));
+                }
+            }
+        }
+    }
+
+    private static void addAdvancedEllipseTargets(Set<BlockPos> targets, RtsCullingBox box, ShapeFillMode fillMode,
+            Direction planeFace) {
+        Direction[] axes = resolveShapePlaneAxes(BuildShape.CIRCLE, planeFace);
+        Direction normal = normalizePlaneFace(planeFace);
+        int fixedNormal = minCoord(box, normal.getAxis());
+        for (int x = box.min().getX(); x <= box.max().getX(); x++) {
+            for (int y = box.min().getY(); y <= box.max().getY(); y++) {
+                for (int z = box.min().getZ(); z <= box.max().getZ(); z++) {
+                    BlockPos pos = new BlockPos(x, y, z);
+                    if (coord(pos, normal.getAxis()) != fixedNormal || !insideEllipseCell(pos, box, axes)) {
+                        continue;
+                    }
+                    boolean boundary = !insideEllipseCell(offsetAlong(pos, axes[0], -1), box, axes)
+                            || !insideEllipseCell(offsetAlong(pos, axes[0], 1), box, axes)
+                            || !insideEllipseCell(offsetAlong(pos, axes[1], -1), box, axes)
+                            || !insideEllipseCell(offsetAlong(pos, axes[1], 1), box, axes);
+                    if (fillMode == ShapeFillMode.FILL || boundary) {
+                        targets.add(pos);
+                    }
+                }
+            }
+        }
+    }
+
+    private static void addAdvancedEllipticCylinderTargets(Set<BlockPos> targets, RtsCullingBox box,
+            ShapeFillMode fillMode, Direction planeFace) {
+        Direction[] axes = resolveShapePlaneAxes(BuildShape.CYLINDER, planeFace);
+        Direction normal = normalizePlaneFace(planeFace);
+        int normalMin = minCoord(box, normal.getAxis());
+        int normalMax = maxCoord(box, normal.getAxis());
+        boolean singleLayer = normalMin == normalMax;
+        for (int y = box.min().getY(); y <= box.max().getY(); y++) {
+            for (int x = box.min().getX(); x <= box.max().getX(); x++) {
+                for (int z = box.min().getZ(); z <= box.max().getZ(); z++) {
+                    BlockPos pos = new BlockPos(x, y, z);
+                    if (!insideEllipseCell(pos, box, axes)) {
+                        continue;
+                    }
+                    int normalCoord = coord(pos, normal.getAxis());
+                    boolean capLayer = normalCoord == normalMin || normalCoord == normalMax;
+                    boolean sideBoundary = !insideEllipseCell(offsetAlong(pos, axes[0], -1), box, axes)
+                            || !insideEllipseCell(offsetAlong(pos, axes[0], 1), box, axes)
+                            || !insideEllipseCell(offsetAlong(pos, axes[1], -1), box, axes)
+                            || !insideEllipseCell(offsetAlong(pos, axes[1], 1), box, axes);
+                    if (fillMode == ShapeFillMode.FILL || (!singleLayer && capLayer) || sideBoundary) {
+                        targets.add(pos);
+                    }
+                }
+            }
+        }
+    }
+
+    private static void addAdvancedEllipsoidTargets(Set<BlockPos> targets, RtsCullingBox box, ShapeFillMode fillMode) {
+        for (int y = box.min().getY(); y <= box.max().getY(); y++) {
+            for (int x = box.min().getX(); x <= box.max().getX(); x++) {
+                for (int z = box.min().getZ(); z <= box.max().getZ(); z++) {
+                    if (!insideEllipsoidCell(x, y, z, box)) {
+                        continue;
+                    }
+                    boolean boundary = !insideEllipsoidCell(x - 1, y, z, box)
+                            || !insideEllipsoidCell(x + 1, y, z, box)
+                            || !insideEllipsoidCell(x, y - 1, z, box)
+                            || !insideEllipsoidCell(x, y + 1, z, box)
+                            || !insideEllipsoidCell(x, y, z - 1, box)
+                            || !insideEllipsoidCell(x, y, z + 1, box);
+                    if (fillMode == ShapeFillMode.FILL || boundary) {
+                        targets.add(new BlockPos(x, y, z));
+                    }
+                }
+            }
+        }
+    }
+
+    private static boolean insideEllipseCell(int x, int z, RtsCullingBox box) {
+        return normalizedCellDistance(x, box.min().getX(), box.max().getX())
+                + normalizedCellDistance(z, box.min().getZ(), box.max().getZ()) <= 1.0D;
+    }
+
+    private static boolean insideEllipseCell(BlockPos pos, RtsCullingBox box, Direction[] axes) {
+        return normalizedCellDistance(coord(pos, axes[0].getAxis()),
+                minCoord(box, axes[0].getAxis()), maxCoord(box, axes[0].getAxis()))
+                + normalizedCellDistance(coord(pos, axes[1].getAxis()),
+                        minCoord(box, axes[1].getAxis()), maxCoord(box, axes[1].getAxis())) <= 1.0D;
+    }
+
+    private static boolean insideEllipsoidCell(int x, int y, int z, RtsCullingBox box) {
+        return normalizedCellDistance(x, box.min().getX(), box.max().getX())
+                + normalizedCellDistance(y, box.min().getY(), box.max().getY())
+                + normalizedCellDistance(z, box.min().getZ(), box.max().getZ()) <= 1.0D;
+    }
+
+    private static double normalizedCellDistance(int value, int min, int max) {
+        if (min >= max) {
+            return value == min ? 0.0D : Double.POSITIVE_INFINITY;
+        }
+        double center = (min + max + 1) * 0.5D;
+        double radius = ((max - min) + 1) * 0.5D;
+        double delta = ((value + 0.5D) - center) / radius;
+        return delta * delta;
+    }
+
     public static int clampShapeOffset(int value) {
         return Mth.clamp(value, -BuilderScreenConstants.SHAPE_MAX_OFFSET, BuilderScreenConstants.SHAPE_MAX_OFFSET);
     }
@@ -580,6 +770,38 @@ public final class ShapeGeometryUtil {
         int dy = (axisA.getStepY() * stepA) + (axisB.getStepY() * stepB);
         int dz = (axisA.getStepZ() * stepA) + (axisB.getStepZ() * stepB);
         return origin.offset(dx, dy, dz);
+    }
+
+    private static BlockPos offsetAlong(BlockPos origin, Direction axis, int step) {
+        return origin.offset(axis.getStepX() * step, axis.getStepY() * step, axis.getStepZ() * step);
+    }
+
+    private static Direction normalizePlaneFace(Direction face) {
+        return face == null ? Direction.UP : face;
+    }
+
+    private static int coord(BlockPos pos, Direction.Axis axis) {
+        return switch (axis) {
+            case X -> pos.getX();
+            case Y -> pos.getY();
+            case Z -> pos.getZ();
+        };
+    }
+
+    private static int minCoord(RtsCullingBox box, Direction.Axis axis) {
+        return switch (axis) {
+            case X -> box.min().getX();
+            case Y -> box.min().getY();
+            case Z -> box.min().getZ();
+        };
+    }
+
+    private static int maxCoord(RtsCullingBox box, Direction.Axis axis) {
+        return switch (axis) {
+            case X -> box.max().getX();
+            case Y -> box.max().getY();
+            case Z -> box.max().getZ();
+        };
     }
 
     /** 旋转平面偏移量 */
@@ -612,7 +834,7 @@ public final class ShapeGeometryUtil {
 
     /** 解析形状的平面轴向 */
     public static Direction[] resolveShapePlaneAxes(BuildShape shape, Direction face) {
-        if (shape == BuildShape.SQUARE || shape == BuildShape.CYLINDER || shape == BuildShape.BOX) {
+        if (shape == BuildShape.SQUARE || shape == BuildShape.BOX) {
             return new Direction[] { Direction.EAST, Direction.SOUTH };
         }
         if (shape == BuildShape.WALL) {

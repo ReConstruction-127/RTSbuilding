@@ -8,6 +8,7 @@ import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.RenderStateShard;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.phys.AABB;
 
 import java.util.List;
 
@@ -51,14 +52,22 @@ public final class DestructiveGhostRenderer {
      */
     static void render(ShapeDataRecords.GhostPreview preview, PoseStack poseStack,
             VertexConsumer lineBuffer, VertexConsumer fillBuffer, float progress, float alphaMultiplier) {
-        render(preview, poseStack, lineBuffer, fillBuffer, progress, alphaMultiplier, true, true);
+        render(preview, poseStack, lineBuffer, fillBuffer, progress, alphaMultiplier, null);
+    }
+
+    static void render(ShapeDataRecords.GhostPreview preview, PoseStack poseStack,
+            VertexConsumer lineBuffer, VertexConsumer fillBuffer, float progress, float alphaMultiplier,
+            AABB envelopeOverride) {
+        renderDestructiveGhost(
+                preview, poseStack, lineBuffer, fillBuffer, progress, alphaMultiplier,
+                true, true, envelopeOverride);
     }
 
     static void render(ShapeDataRecords.GhostPreview preview, PoseStack poseStack,
             VertexConsumer lineBuffer, VertexConsumer fillBuffer, float progress, float alphaMultiplier,
             boolean renderFill, boolean renderLines) {
         renderDestructiveGhost(preview, poseStack, lineBuffer, fillBuffer, progress, alphaMultiplier,
-                renderFill, renderLines);
+                renderFill, renderLines, null);
     }
 
     /**
@@ -123,7 +132,7 @@ public final class DestructiveGhostRenderer {
 
     private static void renderDestructiveGhost(ShapeDataRecords.GhostPreview preview, PoseStack poseStack,
             VertexConsumer lineBuffer, VertexConsumer fillBuffer, float progress, float alphaMultiplier,
-            boolean renderFill, boolean renderLines) {
+            boolean renderFill, boolean renderLines, AABB envelopeOverride) {
         float alpha = RenderingUtil.clamp01(alphaMultiplier);
         if (alpha <= 0.0F || (!renderFill && !renderLines)) return;
 
@@ -139,7 +148,7 @@ public final class DestructiveGhostRenderer {
                     preview.blocks(), preview.emptyBlocks(),
                     envLineR, envLineG, envLineB, 0.78F * alpha,
                     envFillR, envFillG, envFillB, 0.10F * alpha,
-                    renderFill, renderLines);
+                    renderFill, renderLines, envelopeOverride);
         }
 
         List<BlockPos> blocks = preview.blocks();
@@ -199,17 +208,19 @@ public final class DestructiveGhostRenderer {
             List<BlockPos> primaryBlocks, List<BlockPos> envelopeBlocks,
             float lineR, float lineG, float lineB, float lineA,
             float fillR, float fillG, float fillB, float fillA,
-            boolean renderFill, boolean renderLines) {
-        RenderingUtil.Bounds bounds = RenderingUtil.Bounds.from(primaryBlocks, envelopeBlocks);
-        if (bounds == null) return;
+            boolean renderFill, boolean renderLines, AABB envelopeOverride) {
+        RenderingUtil.Bounds bounds = envelopeOverride == null
+                ? RenderingUtil.Bounds.from(primaryBlocks, envelopeBlocks)
+                : null;
+        if (bounds == null && envelopeOverride == null) return;
 
         double padding = BOUNDARY_PADDING;
-        double minX = bounds.minX() - padding;
-        double minY = bounds.minY() - padding;
-        double minZ = bounds.minZ() - padding;
-        double maxX = bounds.maxX() + 1.0D + padding;
-        double maxY = bounds.maxY() + 1.0D + padding;
-        double maxZ = bounds.maxZ() + 1.0D + padding;
+        double minX = (envelopeOverride == null ? bounds.minX() : envelopeOverride.minX) - padding;
+        double minY = (envelopeOverride == null ? bounds.minY() : envelopeOverride.minY) - padding;
+        double minZ = (envelopeOverride == null ? bounds.minZ() : envelopeOverride.minZ) - padding;
+        double maxX = (envelopeOverride == null ? bounds.maxX() + 1.0D : envelopeOverride.maxX) + padding;
+        double maxY = (envelopeOverride == null ? bounds.maxY() + 1.0D : envelopeOverride.maxY) + padding;
+        double maxZ = (envelopeOverride == null ? bounds.maxZ() + 1.0D : envelopeOverride.maxZ) + padding;
 
         if (renderFill) {
             LevelRenderer.addChainedFilledBoxVertices(poseStack, fillBuffer,

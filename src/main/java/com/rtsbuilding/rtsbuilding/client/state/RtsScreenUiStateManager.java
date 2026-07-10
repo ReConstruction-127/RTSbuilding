@@ -189,8 +189,20 @@ public final class RtsScreenUiStateManager {
                 // ---- 输入灵敏度（int → fraction 转换） ----
                 // camera
                 new CtrlBind(
-                        state -> state.camera.inputSensitivityIndex = this.controller.getInputSensitivityIndex(),
-                        state -> applyInputSensitivity(state.camera.inputSensitivityIndex)
+                        state -> {
+                            state.camera.inputSensitivityIndex = this.controller.getRotateViewSensitivityIndex();
+                            state.camera.panDragSensitivityIndex = this.controller.getPanDragSensitivityIndex();
+                            state.camera.rotateViewSensitivityIndex = this.controller.getRotateViewSensitivityIndex();
+                            state.camera.keyboardMoveSensitivityIndex = this.controller.getKeyboardMoveSensitivityIndex();
+                            state.camera.wheelZoomSensitivityIndex = this.controller.getWheelZoomSensitivityIndex();
+                        },
+                        state -> {
+                            int fallback = state.camera.inputSensitivityIndex;
+                            applyPanDragSensitivity(state.camera.panDragSensitivityIndex, fallback);
+                            applyRotateViewSensitivity(state.camera.rotateViewSensitivityIndex, fallback);
+                            applyKeyboardMoveSensitivity(state.camera.keyboardMoveSensitivityIndex, fallback);
+                            applyWheelZoomSensitivity(state.camera.wheelZoomSensitivityIndex, fallback);
+                        }
                 )
         );
 
@@ -333,18 +345,35 @@ public final class RtsScreenUiStateManager {
     /**
      * 将存储的灵敏度索引转换为 [0, 1] 分数值并应用到控制器。
      */
-    private void applyInputSensitivity(int index) {
-        int presetCount = Math.max(1, this.controller.getInputSensitivityPresetCount());
-        if (presetCount <= 1) {
-            this.controller.setInputSensitivityByFraction(0.0D);
-            return;
-        }
-        int clamped = Mth.clamp(index, 0, presetCount - 1);
-        double fraction = (double) clamped / (double) (presetCount - 1);
-        this.controller.setInputSensitivityByFraction(fraction);
+    /** 尝试解析并设置建造形状字符串。 */
+    private void applyPanDragSensitivity(int index, int fallback) {
+        applySensitivityIndex(index, fallback, this.controller::setPanDragSensitivityByFraction);
     }
 
-    /** 尝试解析并设置建造形状字符串。 */
+    private void applyRotateViewSensitivity(int index, int fallback) {
+        applySensitivityIndex(index, fallback, this.controller::setRotateViewSensitivityByFraction);
+    }
+
+    private void applyKeyboardMoveSensitivity(int index, int fallback) {
+        applySensitivityIndex(index, fallback, this.controller::setKeyboardMoveSensitivityByFraction);
+    }
+
+    private void applyWheelZoomSensitivity(int index, int fallback) {
+        applySensitivityIndex(index, fallback, this.controller::setWheelZoomSensitivityByFraction);
+    }
+
+    private void applySensitivityIndex(int index, int fallback, java.util.function.DoubleConsumer setter) {
+        int presetCount = Math.max(1, this.controller.getInputSensitivityPresetCount());
+        if (presetCount <= 1) {
+            setter.accept(0.0D);
+            return;
+        }
+        int safeFallback = Mth.clamp(fallback, 0, presetCount - 1);
+        int safeIndex = index < 0 ? safeFallback : Mth.clamp(index, 0, presetCount - 1);
+        double fraction = (double) safeIndex / (double) (presetCount - 1);
+        setter.accept(fraction);
+    }
+
     private void parseAndSetBuildShape(String name) {
         try {
             this.controller.setBuildShape(BuildShape.valueOf(name));
